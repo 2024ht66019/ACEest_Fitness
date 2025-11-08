@@ -18,5 +18,5 @@ requests==2.31.0
 requests-mock==1.11.0
 
 # Application dependencies (required for tests)
-# Refer to main application requirements located in flask_app/ directory
--r flask_app/requirements.txt
+# Refer to main application requirements at repository root
+-r requirements.txt

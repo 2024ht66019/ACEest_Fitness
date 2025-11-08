@@ -1,0 +1,91 @@
+services:
+  # PostgreSQL Database Service
+  db:
+    image: postgres:16-alpine
+    container_name: aceest_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-aceest_fitness}
+      POSTGRES_USER: ${POSTGRES_USER:-aceest_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme123}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-db.sh:/docker-entrypoint-initdb.d/init-db.sh
+    ports:
+      - "5432:5432"
+    networks:
+      - aceest_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-aceest_user} -d ${POSTGRES_DB:-aceest_fitness}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Flask Application Service
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: aceest_web
+    restart: unless-stopped
+    environment:
+      FLASK_APP: app.py
+      FLASK_ENV: ${FLASK_ENV:-production}
+      SECRET_KEY: ${SECRET_KEY:-dev-secret-key-change-in-production}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-aceest_user}:${POSTGRES_PASSWORD:-changeme123}@db:5432/${POSTGRES_DB:-aceest_fitness}
+      WORKOUTS_PER_PAGE: ${WORKOUTS_PER_PAGE:-20}
+    volumes:
+      - ./logs:/app/logs
+      - ./instance:/app/instance
+    ports:
+      - "5000:5000"
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - aceest_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    command: >
+      sh -c "
+        echo 'Waiting for database to be ready...' &&
+        sleep 5 &&
+        python run.py init-db &&
+        echo 'Database initialized successfully!' &&
+        gunicorn --bind 0.0.0.0:5000 --workers 4 --threads 2 --timeout 120 --access-logfile - --error-logfile - 'run:app'
+      "
+
+  # Nginx Reverse Proxy (Optional but recommended for production)
+  nginx:
+    image: nginx:alpine
+    container_name: aceest_nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - web
+    networks:
+      - aceest_network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+networks:
+  aceest_network:
+    driver: bridge
+    name: aceest_network
+
+volumes:
+  postgres_data:
+    name: aceest_postgres_data

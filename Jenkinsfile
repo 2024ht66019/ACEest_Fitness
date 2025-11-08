@@ -289,7 +289,8 @@ pipeline {
                     sh """
                         docker build ${buildArgs} \
                             -t ${DOCKER_IMAGE}:${IMAGE_TAG} \
-                            -f Dockerfile .
+                            -f flask_app/Dockerfile \
+                            flask_app/
                         
                         echo "✅ Docker image built: ${DOCKER_IMAGE}:${IMAGE_TAG}"
                     """

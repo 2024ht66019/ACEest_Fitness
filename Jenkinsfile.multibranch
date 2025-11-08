@@ -134,11 +134,10 @@ pipeline {
             steps {
                 script {
                     echo "🔧 Setting up Python environment..."
-                    sh '''
+                    sh """
                         set -e
                         python3 --version
                         
-                        # Create virtual environment (with system site packages access if needed)
                         if [ ! -d "venv" ]; then
                             python3 -m venv venv
                             echo "✅ Virtual environment created"
@@ -146,19 +145,16 @@ pipeline {
                             echo "ℹ️  Using existing virtual environment"
                         fi
                         
-                        # Activate virtual environment
                         . venv/bin/activate
                         
-                        # Verify pip in venv
                         pip --version
                         
-                        # Upgrade pip in virtual environment
                         pip install --upgrade pip setuptools wheel
                         
                         pip install -r flask_app/requirements.txt
                         
                         echo "✅ Environment setup complete"
-                    '''
+                    """
                 }
             }
         }

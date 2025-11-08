@@ -462,17 +462,17 @@ pipeline {
                         retry(10) {
                             sleep 15
                             sh """
-                                SERVICE_IP=\$(kubectl get service aceest-web-service \
-                                    -n ${K8S_NAMESPACE} \
-                                    -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+                                INGRESS_HOST=\$(kubectl get ingress aceest-web-ingress --no-headers \\
+                                    --namespace=${K8S_NAMESPACE} \\
+                                    | awk '{print \$3}')
                                 
-                                if [ -z "\$SERVICE_IP" ]; then
-                                    echo "⏳ Waiting for LoadBalancer IP..."
+                                if [ -z "\$INGRESS_HOST" ]; then
+                                    echo "⏳ Waiting for Ingress host..."
                                     exit 1
                                 fi
                                 
                                 HTTP_CODE=\$(curl -s -o /dev/null -w "%{http_code}" \
-                                    --max-time 10 http://\$SERVICE_IP/health)
+                                    --max-time 10 http://\$INGRESS_HOST/health)
                                 
                                 if [ "\$HTTP_CODE" = "200" ]; then
                                     echo "✅ Health check passed (HTTP \$HTTP_CODE)"

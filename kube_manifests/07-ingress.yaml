@@ -4,21 +4,18 @@ metadata:
   name: aceest-web-ingress
   namespace: aceest-fitness
   annotations:
-    # For Azure Application Gateway Ingress Controller (AGIC)
-    appgw.ingress.kubernetes.io/ssl-redirect: "false"
     appgw.ingress.kubernetes.io/connection-draining: "true"
     appgw.ingress.kubernetes.io/connection-draining-timeout: "30"
     appgw.ingress.kubernetes.io/request-timeout: "30"
     appgw.ingress.kubernetes.io/ssl-redirect: "true"
-    # For Nginx Ingress (alternative)
-    # nginx.ingress.kubernetes.io/rewrite-target: /
-    # nginx.ingress.kubernetes.io/ssl-redirect: "false"
-    # cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    appgw.ingress.kubernetes.io/appgw-ssl-certificate: "aceest-tls-secret"
+    
+    # cert-manager annotations
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    cert-manager.io/acme-challenge-type: http01
+    
 spec:
-  # Use this for AGIC (comment out for nginx)
   ingressClassName: azure-application-gateway
-  # Use this for Nginx (comment out for AGIC)
-  # ingressClassName: nginx
   rules:
   - host: dharma.webhop.me
     http:
@@ -33,4 +30,4 @@ spec:
   tls:
   - hosts:
     - dharma.webhop.me
-    secretName: aceest-tls-secret
+    secretName: aceest-tls-secret  # cert-manager will create this automatically

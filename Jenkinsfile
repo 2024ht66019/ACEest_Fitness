@@ -127,22 +127,25 @@ pipeline {
                 script {
                     echo "🔧 Setting up Python environment..."
                     sh '''
+                        set -e
                         python3 --version
                         
-                        # Check if pip is available, install if needed
-                        if ! python3 -m pip --version &> /dev/null; then
-                            echo "Installing pip..."
-                            curl -sS https://bootstrap.pypa.io/get-pip.py | python3
+                        # Create virtual environment (with system site packages access if needed)
+                        if [ ! -d "venv" ]; then
+                            python3 -m venv venv
+                            echo "✅ Virtual environment created"
+                        else
+                            echo "ℹ️  Using existing virtual environment"
                         fi
                         
-                        python3 -m pip --version
-                        
-                        # Create virtual environment
-                        python3 -m venv venv || true
+                        # Activate virtual environment
                         . venv/bin/activate
                         
-                        # Upgrade pip
-                        python3 -m pip install --upgrade pip setuptools wheel
+                        # Verify pip in venv
+                        pip --version
+                        
+                        # Upgrade pip in virtual environment
+                        pip install --upgrade pip setuptools wheel
                         
                         # Install dependencies
                         pip install -r flask_app/requirements.txt
@@ -150,14 +153,14 @@ pipeline {
                         echo "✅ Environment setup complete"
                     '''
                 }
-            }
-        }
-        
-        stage('Run Tests') {
-            when {
-                expression { params.RUN_TESTS == true }
-            }
-            steps {
+                    sh '''
+                        . venv/bin/activate
+                        
+                        # Install test dependencies
+                        pip install -r flask_app/requirements-test.txt
+                        
+                        # Install test dependencies
+                        python3 -m pip install -r flask_app/requirements-test.txt
                 script {
                     echo "🧪 Running automated tests with Pytest..."
                     sh '''

@@ -130,10 +130,16 @@ pipeline {
                         set -e
                         python3 --version
                         
-                        if ! dpkg -l | grep -q python3-venv; then
-                            echo "Installing python3-venv..."
-                            sudo apt-get update -qq
-                            sudo apt-get install -y python3-venv python3-pip
+                        if ! python3 -m venv --help &> /dev/null; then
+                            echo "❌ ERROR: python3-venv is not installed!"
+                            echo "Please install it on Jenkins agent with:"
+                            echo "  sudo apt-get update && sudo apt-get install -y python3-venv python3-pip"
+                            exit 1
+                        fi
+                        
+                        if [ -d "venv" ] && [ ! -f "venv/bin/activate" ]; then
+                            echo "⚠️  Removing corrupted virtual environment..."
+                            rm -rf venv
                         fi
                         
                         if [ ! -d "venv" ]; then

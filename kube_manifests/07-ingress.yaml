@@ -9,6 +9,7 @@ metadata:
     appgw.ingress.kubernetes.io/connection-draining: "true"
     appgw.ingress.kubernetes.io/connection-draining-timeout: "30"
     appgw.ingress.kubernetes.io/request-timeout: "30"
+    appgw.ingress.kubernetes.io/ssl-redirect: "true"
     # For Nginx Ingress (alternative)
     # nginx.ingress.kubernetes.io/rewrite-target: /
     # nginx.ingress.kubernetes.io/ssl-redirect: "false"
@@ -19,7 +20,7 @@ spec:
   # Use this for Nginx (comment out for AGIC)
   # ingressClassName: nginx
   rules:
-  - host: aceest-fitness.local
+  - host: dharma.webhop.me
     http:
       paths:
       - path: /
@@ -31,5 +32,5 @@ spec:
               number: 80
   tls:
   - hosts:
-    - aceest-fitness.local
+    - dharma.webhop.me
     secretName: aceest-tls-secret

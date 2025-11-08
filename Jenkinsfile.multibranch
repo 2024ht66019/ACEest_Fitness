@@ -188,9 +188,6 @@ pipeline {
                     '''
                 }
             }
-            post {  '''
-                }
-            }
             post {
                 always {
                     junit testResults: 'test-results/pytest-results.xml', allowEmptyResults: true

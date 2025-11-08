@@ -26,6 +26,7 @@ wheels/
 # Flask
 instance/
 .webassets-cache
+flask_app/
 
 # Testing
 .pytest_cache/

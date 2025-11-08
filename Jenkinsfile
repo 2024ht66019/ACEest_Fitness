@@ -242,8 +242,8 @@ pipeline {
                                 -Dsonar.python.xunit.reportPath=test-results/pytest-results.xml \\
                                 -Dsonar.projectVersion=${BUILD_VERSION} \\
                                 -Dsonar.scm.revision=${GIT_COMMIT_SHORT} \\
-                                -Dsonar.sourceEncoding=UTF-8 \\
-                                -Dsonar.exclusions=venv/**,htmlcov/**,app_files/**,flask_app/**,kube_manifests/**,terraform/**
+                                -Dsonar.sourceEncoding=UTF-8 \
+                                -Dsonar.exclusions=venv/**,htmlcov/**,app_files/**,kube_manifests/**,terraform/**
                         """
                     }
                 }

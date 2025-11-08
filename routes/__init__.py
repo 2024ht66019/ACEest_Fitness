@@ -1,5 +1,5 @@
 """
 Routes package initialization
-"""
 
-__all__ = ['auth_bp', 'main_bp', 'workouts_bp', 'analytics_bp']
+Blueprints are imported directly in app.py to avoid circular dependencies.
+"""

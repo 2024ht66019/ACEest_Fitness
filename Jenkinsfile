@@ -130,6 +130,12 @@ pipeline {
                         set -e
                         python3 --version
                         
+                        if ! dpkg -l | grep -q python3-venv; then
+                            echo "Installing python3-venv..."
+                            sudo apt-get update -qq
+                            sudo apt-get install -y python3-venv python3-pip
+                        fi
+                        
                         if [ ! -d "venv" ]; then
                             python3 -m venv venv
                             echo "✅ Virtual environment created"

@@ -1,8 +1,6 @@
-"""
-Database models for ACEest Fitness application
-"""
+"""Database models for ACEest Fitness application (package-level exports)."""
 
-from models.user import User
-from models.workout import Workout
+from .user import User
+from .workout import Workout
 
-__all__ = ['User', 'Workout']
+__all__ = ["User", "Workout"]

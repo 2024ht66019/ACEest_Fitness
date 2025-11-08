@@ -147,7 +147,6 @@ pipeline {
                         # Upgrade pip in virtual environment
                         pip install --upgrade pip setuptools wheel
                         
-                        # Install dependencies
                         pip install -r flask_app/requirements.txt
                         
                         echo "✅ Environment setup complete"

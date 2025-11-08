@@ -128,13 +128,20 @@ pipeline {
                     sh """
                         set -e
                         python3 --version
-                        
-                        if ! dpkg -l | grep -q python3-venv; then
-                            echo "Installing python3-venv..."
-                            sudo apt-get update -qq
-                            sudo apt-get install -y python3-venv python3-pip
+                        # Verify python3-venv availability (no sudo escalation inside pipeline)
+                        if ! python3 -m venv --help >/dev/null 2>&1; then
+                            echo "❌ python3-venv not available on agent. Install manually:"
+                            echo "   sudo apt-get update && sudo apt-get install -y python3-venv python3-pip"
+                            exit 1
                         fi
 
+                        # If directory exists but activation script missing, treat as corrupted and recreate
+                        if [ -d "venv" ] && [ ! -f "venv/bin/activate" ]; then
+                            echo "⚠️  Detected corrupted venv (missing bin/activate). Recreating..."
+                            rm -rf venv
+                        fi
+
+                        # Create venv if absent
                         if [ ! -d "venv" ]; then
                             python3 -m venv venv
                             echo "✅ Virtual environment created"
@@ -142,15 +149,25 @@ pipeline {
                             echo "ℹ️  Using existing virtual environment"
                         fi
 
-                        . venv/bin/activate
+                        # Activate
+                        . venv/bin/activate || { echo "❌ Failed to activate venv"; ls -R venv || true; exit 1; }
 
-                        pip --version
+                        # Ensure pip exists (handle rare ensurepip omission)
+                        if ! command -v pip >/dev/null 2>&1; then
+                            echo "⚠️  pip missing inside venv; running ensurepip..."
+                            python3 -m ensurepip --upgrade || true
+                        fi
+
+                        pip --version || { echo "❌ pip still unavailable"; exit 1; }
+
+                        # Upgrade base packaging tools (quiet, retry once on failure)
+                        pip install --upgrade pip setuptools wheel --quiet || pip install --upgrade pip setuptools wheel
                         
-                        pip install --upgrade pip setuptools wheel
-                        
+                        # Install application dependencies
                         pip install -r flask_app/requirements.txt
                         
                         echo "✅ Environment setup complete"
+                        echo "📁 venv contents summary:"; ls -1 venv | sed 's/^/   - /'
                     """
                 }
             }

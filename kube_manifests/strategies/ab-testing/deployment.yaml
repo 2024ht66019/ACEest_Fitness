@@ -7,6 +7,7 @@ metadata:
     app: aceest-web
     version: version-a
     strategy: ab-testing
+    last_build: "TIMESTAMP_PLACEHOLDER"
 spec:
   replicas: 3
   selector:
@@ -70,6 +71,7 @@ metadata:
     app: aceest-web
     version: version-b
     strategy: ab-testing
+    last_build: "TIMESTAMP_PLACEHOLDER"
 spec:
   replicas: 3
   selector:

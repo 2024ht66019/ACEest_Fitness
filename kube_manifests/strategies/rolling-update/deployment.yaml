@@ -6,6 +6,7 @@ metadata:
   labels:
     app: aceest-web
     strategy: rolling-update
+    last_build: "TIMESTAMP_PLACEHOLDER"
   annotations:
     kubernetes.io/change-cause: "Rolling update deployment"
 spec:

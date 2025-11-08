@@ -411,6 +411,10 @@ pipeline {
                             find strategies/${DEPLOYMENT_STRATEGY}/ -name "*.yaml" -exec \
                                 sed -i "s|image: dharmalakshmi15/aceest-fitness-gym:.*|image: ${DOCKER_IMAGE}:${IMAGE_TAG}|g" {} +
                             
+                            echo "⏰ Injecting build timestamp into deployment labels..."
+                            find strategies/${DEPLOYMENT_STRATEGY}/ -name "*.yaml" -exec \
+                                sed -i "s|last_build: \"TIMESTAMP_PLACEHOLDER\"|last_build: \"${BUILD_TIMESTAMP}\"|g" {} +
+                            
                             kubectl apply -f strategies/${DEPLOYMENT_STRATEGY}/
                             echo "✅ Deployment initiated"
                         """

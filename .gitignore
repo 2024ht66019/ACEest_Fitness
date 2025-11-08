@@ -82,3 +82,7 @@ node_modules/
 .DS_Store
 
 aks-kubeconfig.yaml
+
+# Markdown files (except README.md)
+*.md
+!README.md

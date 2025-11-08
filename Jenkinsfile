@@ -231,21 +231,18 @@ pipeline {
                 script {
                     echo "📊 Running SonarQube code analysis..."
                     
-                    withSonarQubeEnv('SonarQube') {
+                    def scannerHome = tool 'SonarQubeScanner'
+                    withSonarQubeEnv('sonarqube') {
                         sh """
-                            . venv/bin/activate
-                            
-                            sonar-scanner \\
-                                -Dsonar.projectKey=aceest-fitness-gym \
-                                -Dsonar.sources=app,run.py,config.py \
-                                -Dsonar.tests=tests \
-                                -Dsonar.host.url=\${SONARQUBE_URL} \
-                                -Dsonar.login=\${SONAR_TOKEN} \
-                                -Dsonar.python.coverage.reportPaths=coverage.xml \
-                                -Dsonar.python.xunit.reportPath=test-results/pytest-results.xml \
-                                -Dsonar.projectVersion=\${BUILD_VERSION} \
-                                -Dsonar.scm.revision=\${GIT_COMMIT_SHORT} \
-                                -Dsonar.branch.name=\${BRANCH_NAME}
+                            ${scannerHome}/bin/sonar-scanner \\
+                                -Dsonar.projectKey=aceest-fitness-gym \\
+                                -Dsonar.sources=flask_app \\
+                                -Dsonar.tests=tests \\
+                                -Dsonar.python.coverage.reportPaths=coverage.xml \\
+                                -Dsonar.python.xunit.reportPath=test-results/pytest-results.xml \\
+                                -Dsonar.projectVersion=${BUILD_VERSION} \\
+                                -Dsonar.scm.revision=${GIT_COMMIT_SHORT} \\
+                                -Dsonar.sourceEncoding=UTF-8
                         """
                     }
                 }

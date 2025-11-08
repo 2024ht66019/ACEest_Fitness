@@ -135,14 +135,14 @@ pipeline {
                             sudo apt-get install -y python3-venv python3-pip
                         fi
 
-                        if [ ! -d "$PWD/venv" ]; then
-                            python3 -m venv $PWD/venv
+                        if [ ! -d "venv" ]; then
+                            python3 -m venv venv
                             echo "✅ Virtual environment created"
                         else
                             echo "ℹ️  Using existing virtual environment"
                         fi
 
-                        . $PWD/venv/bin/activate
+                        . venv/bin/activate
 
                         pip --version
                         
@@ -161,7 +161,7 @@ pipeline {
                 script {
                     echo "🧪 Running automated tests with Pytest..."
                     sh """
-                        . \$PWD/venv/bin/activate
+                        . venv/bin/activate
                         
                         pip install -r flask_app/requirements-test.txt
                         
@@ -208,7 +208,7 @@ pipeline {
                     
                     withSonarQubeEnv('SonarQube') {
                         sh """
-                            . \$PWD/venv/bin/activate
+                            . venv/bin/activate
                             
                             sonar-scanner \\
                                 -Dsonar.projectKey=aceest-fitness-gym \

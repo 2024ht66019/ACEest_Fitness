@@ -44,20 +44,13 @@ pipeline {
         SONAR_TOKEN = credentials('sonarqube-token')
         
         // Branch-based environment selection
-        DEPLOY_ENV = "${env.BRANCH_NAME == 'main' || env.BRANCH_NAME == 'master' ? 'production' : 
-                       env.BRANCH_NAME == 'develop' ? 'staging' : 
-                       env.BRANCH_NAME.startsWith('release/') ? 'staging' : 'dev'}"
+        DEPLOY_ENV = "${env.BRANCH_NAME == 'main' || env.BRANCH_NAME == 'master' ? 'production' : env.BRANCH_NAME == 'develop' ? 'staging' : env.BRANCH_NAME.startsWith('release/') ? 'staging' : 'dev'}"
         
         // Branch-based deployment strategy
-        DEPLOYMENT_STRATEGY = "${env.BRANCH_NAME == 'main' || env.BRANCH_NAME == 'master' ? 'blue-green' : 
-                                env.BRANCH_NAME == 'develop' ? 'canary' : 
-                                env.BRANCH_NAME.startsWith('release/') ? 'canary' : 
-                                env.BRANCH_NAME.startsWith('hotfix/') ? 'rolling-update' : 'rolling-update'}"
+        DEPLOYMENT_STRATEGY = "${env.BRANCH_NAME == 'main' || env.BRANCH_NAME == 'master' ? 'blue-green' : env.BRANCH_NAME == 'develop' ? 'canary' : env.BRANCH_NAME.startsWith('release/') ? 'canary' : env.BRANCH_NAME.startsWith('hotfix/') ? 'rolling-update' : 'rolling-update'}"
         
         // Image tag strategy
-        IMAGE_TAG = "${env.BRANCH_NAME == 'main' || env.BRANCH_NAME == 'master' ? 'latest' : 
-                     env.BRANCH_NAME == 'develop' ? 'staging' : 
-                     env.BRANCH_NAME.replaceAll('/', '-')}-${env.BUILD_NUMBER}"
+        IMAGE_TAG = "${env.BRANCH_NAME == 'main' || env.BRANCH_NAME == 'master' ? 'latest' : env.BRANCH_NAME == 'develop' ? 'staging' : env.BRANCH_NAME.replaceAll('/', '-') + '-' + env.BUILD_NUMBER}"
         
         // Build metadata
         BUILD_VERSION = "${IMAGE_TAG}"
@@ -69,9 +62,7 @@ pipeline {
         PYTEST_ADDOPTS = '--color=yes'
         
         // Deployment control flags
-        SHOULD_DEPLOY = "${(env.BRANCH_NAME == 'main' || env.BRANCH_NAME == 'master' || 
-                          env.BRANCH_NAME == 'develop' || 
-                          env.BRANCH_NAME.startsWith('release/')) ? 'true' : 'false'}"
+        SHOULD_DEPLOY = "${(env.BRANCH_NAME == 'main' || env.BRANCH_NAME == 'master' || env.BRANCH_NAME == 'develop' || env.BRANCH_NAME.startsWith('release/')) ? 'true' : 'false'}"
         IS_PR = "${env.CHANGE_ID != null ? 'true' : 'false'}"
     }
     

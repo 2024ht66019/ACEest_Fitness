@@ -161,7 +161,7 @@ pipeline {
                 script {
                     echo "🧪 Running automated tests with Pytest..."
                     sh """
-                        . venv/bin/activate
+                        . \$PWD/venv/bin/activate
                         
                         pip install -r flask_app/requirements-test.txt
                         
@@ -208,9 +208,9 @@ pipeline {
                     
                     withSonarQubeEnv('SonarQube') {
                         sh """
-                            . venv/bin/activate
+                            . \$PWD/venv/bin/activate
                             
-                            sonar-scanner \
+                            sonar-scanner \\
                                 -Dsonar.projectKey=aceest-fitness-gym \
                                 -Dsonar.sources=app,run.py,config.py \
                                 -Dsonar.tests=tests \

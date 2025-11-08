@@ -187,6 +187,9 @@ pipeline {
                             exit 1
                         fi
                         
+                        # Ensure test results directory exists (pytest won't create nested path automatically)
+                        mkdir -p test-results
+                        
                         pytest \\
                             --verbose \\
                             --junit-xml=test-results/pytest-results.xml \\

@@ -161,22 +161,22 @@ pipeline {
                 }
             }
         }
+        
+        stage('Run Tests') {
+            steps {
                 script {
                     echo "🧪 Running automated tests with Pytest..."
                     sh '''
                         . venv/bin/activate
                         
                         # Install test dependencies
-                        pip install -r requirements-test.txt
-                        
-                        # Create test results directory
-                        mkdir -p test-results
+                        pip install -r flask_app/requirements-test.txt
                         
                         # Run pytest with coverage
                         pytest \
                             --verbose \
                             --junit-xml=test-results/pytest-results.xml \
-                            --cov=app \
+                            --cov=flask_app \
                             --cov-report=html:htmlcov \
                             --cov-report=xml:coverage.xml \
                             --cov-report=term-missing \
@@ -186,6 +186,9 @@ pipeline {
                         
                         echo "✅ All tests passed!"
                     '''
+                }
+            }
+            post {  '''
                 }
             }
             post {

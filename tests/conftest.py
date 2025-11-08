@@ -42,6 +42,11 @@ def client(app):
 def init_database(app):
     """Initialize database with test data."""
     with app.app_context():
+        # Clean up any existing data first
+        db.session.query(Workout).delete()
+        db.session.query(User).delete()
+        db.session.commit()
+        
         # Create test user
         test_user = User(
             username='testuser',
@@ -63,11 +68,12 @@ def init_database(app):
         # Create test workout
         workout = Workout(
             user_id=test_user.id,
-            workout_type='Running',
+            category='Workout',
+            exercise_name='Running',
             duration=30,
             calories_burned=300,
             notes='Morning run',
-            workout_date=datetime.utcnow()
+            workout_date=datetime.utcnow().date()
         )
         db.session.add(workout)
         db.session.commit()

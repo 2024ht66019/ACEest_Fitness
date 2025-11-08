@@ -3,10 +3,19 @@ Main routes blueprint
 Handles landing page, dashboard, and general pages
 """
 
-from flask import Blueprint, render_template, redirect, url_for
+from flask import Blueprint, render_template, redirect, url_for, jsonify
 from flask_login import login_required, current_user
 
 main_bp = Blueprint('main', __name__)
+
+
+@main_bp.route('/health')
+def health():
+    """Health check endpoint for monitoring"""
+    return jsonify({
+        'status': 'healthy',
+        'service': 'ACEest Fitness'
+    }), 200
 
 
 @main_bp.route('/')

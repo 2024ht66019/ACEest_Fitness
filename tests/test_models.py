@@ -40,8 +40,8 @@ class TestUserModel:
         """Test user-workout relationship."""
         with app.app_context():
             user = User.query.filter_by(username='testuser').first()
-            assert len(user.workouts) > 0
-            assert isinstance(user.workouts[0], Workout)
+            assert user.workouts.count() > 0
+            assert isinstance(user.workouts.first(), Workout)
 
 
 class TestWorkoutModel:

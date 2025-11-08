@@ -5,6 +5,7 @@ Handles landing page, dashboard, and general pages
 
 from flask import Blueprint, render_template, redirect, url_for, jsonify
 from flask_login import login_required, current_user
+from flask_app.models.workout import Workout
 
 main_bp = Blueprint('main', __name__)
 
@@ -35,7 +36,7 @@ def dashboard():
     
     # Get recent workouts (last 5)
     recent_workouts = current_user.workouts.order_by(
-        'workout_date DESC, created_at DESC'
+        Workout.workout_date.desc(), Workout.created_at.desc()
     ).limit(5).all()
     
     return render_template(

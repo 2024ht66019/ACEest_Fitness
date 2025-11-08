@@ -134,16 +134,16 @@ pipeline {
                             sudo apt-get update -qq
                             sudo apt-get install -y python3-venv python3-pip
                         fi
-                        
-                        if [ ! -d "venv" ]; then
-                            python3 -m venv venv
+
+                        if [ ! -d "$PWD/venv" ]; then
+                            python3 -m venv $PWD/venv
                             echo "✅ Virtual environment created"
                         else
                             echo "ℹ️  Using existing virtual environment"
                         fi
-                        
-                        . venv/bin/activate
-                        
+
+                        . $PWD/venv/bin/activate
+
                         pip --version
                         
                         pip install --upgrade pip setuptools wheel

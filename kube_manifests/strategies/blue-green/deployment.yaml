@@ -8,7 +8,7 @@ metadata:
     version: blue
     strategy: blue-green
 spec:
-  replicas: 3
+  replicas: 1
   selector:
     matchLabels:
       app: aceest-web
@@ -69,7 +69,7 @@ metadata:
     version: green
     strategy: blue-green
 spec:
-  replicas: 3
+  replicas: 1
   selector:
     matchLabels:
       app: aceest-web

@@ -8,7 +8,7 @@ metadata:
     version: stable
     strategy: canary
 spec:
-  replicas: 9
+  replicas: 4
   selector:
     matchLabels:
       app: aceest-web

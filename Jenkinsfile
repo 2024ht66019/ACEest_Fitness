@@ -126,11 +126,10 @@ pipeline {
             steps {
                 script {
                     echo "🔧 Setting up Python environment..."
-                    sh '''
+                    sh """
                         set -e
                         python3 --version
                         
-                        # Create virtual environment (with system site packages access if needed)
                         if [ ! -d "venv" ]; then
                             python3 -m venv venv
                             echo "✅ Virtual environment created"
@@ -138,53 +137,47 @@ pipeline {
                             echo "ℹ️  Using existing virtual environment"
                         fi
                         
-                        # Activate virtual environment
                         . venv/bin/activate
                         
-                        # Verify pip in venv
                         pip --version
                         
-                        # Upgrade pip in virtual environment
                         pip install --upgrade pip setuptools wheel
                         
                         pip install -r flask_app/requirements.txt
                         
                         echo "✅ Environment setup complete"
-                    '''
+                    """
                 }
-                    sh '''
+            }
+        }
+        
+        stage('Run Tests') {
+            when {
+                expression { params.RUN_TESTS == true }
+            }
+            steps {
+                script {
+                    echo "🧪 Running automated tests with Pytest..."
+                    sh """
                         . venv/bin/activate
-                        
                         
                         pip install -r flask_app/requirements-test.txt
                         
-                        
-                        python3 -m pip install -r flask_app/requirements-test.txt
-                script {
-                    echo "🧪 Running automated tests with Pytest..."
-                    sh '''
-                        . venv/bin/activate
-                        
-                        
-                        pip install -r requirements-test.txt
-                        
-                        # Create test results directory
                         mkdir -p test-results
                         
-                        # Run pytest with coverage
-                        pytest \
-                            --verbose \
-                            --junit-xml=test-results/pytest-results.xml \
-                            --cov=app \
-                            --cov-report=html:htmlcov \
-                            --cov-report=xml:coverage.xml \
-                            --cov-report=term-missing \
-                            --cov-branch \
-                            --cov-fail-under=70 \
+                        pytest \\
+                            --verbose \\
+                            --junit-xml=test-results/pytest-results.xml \\
+                            --cov=flask_app \\
+                            --cov-report=html:htmlcov \\
+                            --cov-report=xml:coverage.xml \\
+                            --cov-report=term-missing \\
+                            --cov-branch \\
+                            --cov-fail-under=70 \\
                             || exit 1
                         
                         echo "✅ All tests passed!"
-                    '''
+                    """
                 }
             }
             post {

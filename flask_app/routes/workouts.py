@@ -6,9 +6,9 @@ Handles workout logging, viewing, and management
 from flask import Blueprint, render_template, redirect, url_for, flash, request, jsonify
 from flask_login import login_required, current_user
 from datetime import datetime, timedelta
-from app import db
-from models.workout import Workout
-from config import Config
+from flask_app.app import db
+from flask_app.models.workout import Workout
+from flask_app.config import Config
 
 workouts_bp = Blueprint('workouts', __name__)
 

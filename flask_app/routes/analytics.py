@@ -7,9 +7,9 @@ from flask import Blueprint, render_template, jsonify
 from flask_login import login_required, current_user
 from datetime import datetime, timedelta
 from sqlalchemy import func
-from app import db
-from models.workout import Workout
-from config import Config
+from flask_app.app import db
+from flask_app.models.workout import Workout
+from flask_app.config import Config
 
 analytics_bp = Blueprint('analytics', __name__)
 

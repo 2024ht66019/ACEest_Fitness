@@ -6,8 +6,8 @@ Handles user registration, login, and logout
 from flask import Blueprint, render_template, redirect, url_for, flash, request
 from flask_login import login_user, logout_user, login_required, current_user
 from urllib.parse import urlparse
-from app import db
-from models.user import User
+from flask_app.app import db
+from flask_app.models.user import User
 
 auth_bp = Blueprint('auth', __name__)
 

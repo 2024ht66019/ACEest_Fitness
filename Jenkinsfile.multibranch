@@ -167,26 +167,26 @@ pipeline {
             steps {
                 script {
                     echo "🧪 Running automated tests with Pytest..."
-                    sh '''
+                    sh """
                         . venv/bin/activate
                         
                         # Install test dependencies
                         pip install -r flask_app/requirements-test.txt
                         
                         # Run pytest with coverage
-                        pytest \
-                            --verbose \
-                            --junit-xml=test-results/pytest-results.xml \
-                            --cov=flask_app \
-                            --cov-report=html:htmlcov \
-                            --cov-report=xml:coverage.xml \
-                            --cov-report=term-missing \
-                            --cov-branch \
-                            --cov-fail-under=70 \
+                        pytest \\
+                            --verbose \\
+                            --junit-xml=test-results/pytest-results.xml \\
+                            --cov=flask_app \\
+                            --cov-report=html:htmlcov \\
+                            --cov-report=xml:coverage.xml \\
+                            --cov-report=term-missing \\
+                            --cov-branch \\
+                            --cov-fail-under=70 \\
                             || exit 1
                         
                         echo "✅ All tests passed!"
-                    '''
+                    """
                 }
             }
             post {

@@ -2,7 +2,7 @@
 Workout functionality tests.
 """
 import pytest
-from app.models.workout import Workout
+from models.workout import Workout
 from datetime import datetime
 
 
@@ -101,7 +101,7 @@ class TestWorkouts:
         
         # Verify deletion
         with app.app_context():
-            from flask_app.models.workout import Workout as FlaskWorkout
+            from models.workout import Workout as FlaskWorkout
             workout = FlaskWorkout.query.get(workout_id)
             assert workout is None
     

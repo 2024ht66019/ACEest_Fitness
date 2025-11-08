@@ -7,7 +7,9 @@ Version: 1.0.0
 from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager
-from .config import Config
+import os
+
+from config import Config
 
 # Initialize extensions
 db = SQLAlchemy()
@@ -26,11 +28,11 @@ def create_app(config_class=Config):
     login_manager.login_message = 'Please log in to access this page.'
     login_manager.login_message_category = 'info'
 
-    # Register blueprints (use explicit relative imports for package safety)
-    from .routes.auth import auth_bp
-    from .routes.main import main_bp
-    from .routes.workouts import workouts_bp
-    from .routes.analytics import analytics_bp
+    # Register blueprints
+    from routes.auth import auth_bp
+    from routes.main import main_bp
+    from routes.workouts import workouts_bp
+    from routes.analytics import analytics_bp
 
     app.register_blueprint(auth_bp, url_prefix='/auth')
     app.register_blueprint(main_bp)

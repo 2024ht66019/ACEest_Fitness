@@ -2,8 +2,8 @@
 Model tests for User and Workout models.
 """
 import pytest
-from app.models.user import User
-from app.models.workout import Workout
+from models.user import User
+from models.workout import Workout
 from datetime import datetime, timedelta, timezone
 
 

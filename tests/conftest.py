@@ -9,8 +9,8 @@ import os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from app import create_app, db
-from app.models.user import User
-from app.models.workout import Workout
+from models.user import User
+from models.workout import Workout
 from datetime import datetime, timezone
 
 

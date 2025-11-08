@@ -164,7 +164,7 @@ pipeline {
                         pip install --upgrade pip setuptools wheel --quiet || pip install --upgrade pip setuptools wheel
                         
                         echo "Installing application dependencies"
-                        pip install -r flask_app/requirements.txt
+                        pip install -r requirements.txt
                         
                         echo "✅ Environment setup complete"
                         echo "📁 venv contents summary:"; ls -1 venv | sed 's/^/   - /'
@@ -193,7 +193,7 @@ pipeline {
                         pytest \\
                             --verbose \\
                             --junit-xml=test-results/pytest-results.xml \\
-                            --cov=flask_app \\
+                            --cov=. \\
                             --cov-report=html:htmlcov \\
                             --cov-report=xml:coverage.xml \\
                             --cov-report=term-missing \\
@@ -236,13 +236,14 @@ pipeline {
                         sh """
                             ${scannerHome}/bin/sonar-scanner \\
                                 -Dsonar.projectKey=aceest-fitness-gym \\
-                                -Dsonar.sources=flask_app \\
+                                -Dsonar.sources=. \\
                                 -Dsonar.tests=tests \\
                                 -Dsonar.python.coverage.reportPaths=coverage.xml \\
                                 -Dsonar.python.xunit.reportPath=test-results/pytest-results.xml \\
                                 -Dsonar.projectVersion=${BUILD_VERSION} \\
                                 -Dsonar.scm.revision=${GIT_COMMIT_SHORT} \\
-                                -Dsonar.sourceEncoding=UTF-8
+                                -Dsonar.sourceEncoding=UTF-8 \\
+                                -Dsonar.exclusions=venv/**,htmlcov/**,app_files/**,flask_app/**,kube_manifests/**,terraform/**
                         """
                     }
                 }
@@ -289,8 +290,8 @@ pipeline {
                     sh """
                         docker build ${buildArgs} \
                             -t ${DOCKER_IMAGE}:${IMAGE_TAG} \
-                            -f flask_app/Dockerfile \
-                            flask_app/
+                            -f Dockerfile \
+                            .
                         
                         echo "✅ Docker image built: ${DOCKER_IMAGE}:${IMAGE_TAG}"
                     """

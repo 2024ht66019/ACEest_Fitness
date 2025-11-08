@@ -5,13 +5,12 @@ Provides different modes for running the application
 """
 
 import os
-import sys
+
 from app import create_app, db
-from config import config
+from config import Config
 
 # Create application instance for Gunicorn
-env = os.getenv('FLASK_ENV', 'production')
-app = create_app(config.get(env, config['production']))
+app = create_app(Config)
 
 def run_development():
     """Run application in development mode"""

@@ -155,17 +155,17 @@ pipeline {
                     sh '''
                         . venv/bin/activate
                         
-                        # Install test dependencies
+                        
                         pip install -r flask_app/requirements-test.txt
                         
-                        # Install test dependencies
+                        
                         python3 -m pip install -r flask_app/requirements-test.txt
                 script {
                     echo "🧪 Running automated tests with Pytest..."
                     sh '''
                         . venv/bin/activate
                         
-                        # Install test dependencies
+                        
                         pip install -r requirements-test.txt
                         
                         # Create test results directory

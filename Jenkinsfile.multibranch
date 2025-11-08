@@ -170,7 +170,7 @@ pipeline {
                     sh """
                         . venv/bin/activate
                         
-                        # Install test dependencies
+                        
                         pip install -r flask_app/requirements-test.txt
                         
                         # Run pytest with coverage

@@ -170,10 +170,8 @@ pipeline {
                     sh """
                         . venv/bin/activate
                         
-                        
                         pip install -r flask_app/requirements-test.txt
                         
-                        # Run pytest with coverage
                         pytest \\
                             --verbose \\
                             --junit-xml=test-results/pytest-results.xml \\

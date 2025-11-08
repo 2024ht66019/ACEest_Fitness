@@ -179,7 +179,7 @@ pipeline {
                     echo "🧪 Running automated tests with Pytest..."
                     sh """
                         . venv/bin/activate
-                        echo "Installing test requirements (file lives at repo root, not under flask_app)"
+                        echo "Installing test requirements from repo root"
                         if [ -f requirements-test.txt ]; then
                             pip install -r requirements-test.txt
                         else

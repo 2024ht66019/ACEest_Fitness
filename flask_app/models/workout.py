@@ -3,7 +3,7 @@ Workout model for tracking exercise sessions
 """
 
 from datetime import datetime
-from app import db
+from flask_app.app import db
 
 
 class Workout(db.Model):

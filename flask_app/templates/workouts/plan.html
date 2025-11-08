@@ -1,0 +1,189 @@
+{% extends "base.html" %}
+
+{% block title %}Workout Plan - ACEest Fitness{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h1 class="display-5 fw-bold mb-4">
+        <i class="fas fa-dumbbell"></i> Personalized Workout Plan
+    </h1>
+
+    <div class="card shadow mb-4">
+        <div class="card-body">
+            <h5 class="card-title text-primary">
+                <i class="fas fa-info-circle"></i> How to Use This Plan
+            </h5>
+            <p class="card-text">
+                Follow this comprehensive workout structure for optimal results. Each session should include all three phases:
+                warm-up, main workout, and cool-down. Adjust intensity and duration based on your fitness level.
+            </p>
+        </div>
+    </div>
+
+    <!-- Warm-up Section -->
+    <div class="card shadow mb-4">
+        <div class="card-header bg-info text-white">
+            <h4 class="mb-0"><i class="fas fa-fire-alt"></i> Phase 1: Warm-up (5-10 minutes)</h4>
+        </div>
+        <div class="card-body">
+            <p class="lead">Prepare your body for exercise and prevent injuries</p>
+            <ul class="list-group list-group-flush">
+                <li class="list-group-item">
+                    <strong>Light Cardio (5 minutes)</strong> - Jogging in place or cycling at low intensity
+                </li>
+                <li class="list-group-item">
+                    <strong>Jumping Jacks (30 reps)</strong> - Full body dynamic movement
+                </li>
+                <li class="list-group-item">
+                    <strong>Arm Circles (15 forward, 15 backward)</strong> - Shoulder mobility
+                </li>
+                <li class="list-group-item">
+                    <strong>Leg Swings (10 each leg)</strong> - Hip flexibility
+                </li>
+                <li class="list-group-item">
+                    <strong>Dynamic Stretches</strong> - Walking lunges, high knees, butt kicks
+                </li>
+            </ul>
+        </div>
+    </div>
+
+    <!-- Main Workout Section -->
+    <div class="card shadow mb-4">
+        <div class="card-header bg-success text-white">
+            <h4 class="mb-0"><i class="fas fa-heartbeat"></i> Phase 2: Main Workout (45-60 minutes)</h4>
+        </div>
+        <div class="card-body">
+            <p class="lead">Build strength, endurance, and achieve your fitness goals</p>
+            
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <div class="card h-100">
+                        <div class="card-header bg-light">
+                            <h5 class="mb-0">Upper Body</h5>
+                        </div>
+                        <div class="card-body">
+                            <ul>
+                                <li><strong>Push-ups</strong> - 3 sets of 10-15 reps</li>
+                                <li><strong>Dumbbell Rows</strong> - 3 sets of 12 reps</li>
+                                <li><strong>Shoulder Press</strong> - 3 sets of 10 reps</li>
+                                <li><strong>Bicep Curls</strong> - 3 sets of 12 reps</li>
+                                <li><strong>Tricep Dips</strong> - 3 sets of 10 reps</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-md-6 mb-3">
+                    <div class="card h-100">
+                        <div class="card-header bg-light">
+                            <h5 class="mb-0">Lower Body</h5>
+                        </div>
+                        <div class="card-body">
+                            <ul>
+                                <li><strong>Squats</strong> - 3 sets of 15-20 reps</li>
+                                <li><strong>Lunges</strong> - 3 sets of 10 reps (each leg)</li>
+                                <li><strong>Deadlifts</strong> - 3 sets of 12 reps</li>
+                                <li><strong>Calf Raises</strong> - 3 sets of 15 reps</li>
+                                <li><strong>Leg Press</strong> - 3 sets of 12 reps</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card mt-3">
+                <div class="card-header bg-light">
+                    <h5 class="mb-0">Core & Cardio</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h6 class="text-primary">Core Exercises</h6>
+                            <ul>
+                                <li><strong>Plank</strong> - 3 sets of 60 seconds</li>
+                                <li><strong>Russian Twists</strong> - 3 sets of 20 reps</li>
+                                <li><strong>Leg Raises</strong> - 3 sets of 15 reps</li>
+                                <li><strong>Mountain Climbers</strong> - 3 sets of 20 reps</li>
+                            </ul>
+                        </div>
+                        <div class="col-md-6">
+                            <h6 class="text-success">Cardio Options</h6>
+                            <ul>
+                                <li><strong>Running/Jogging</strong> - 20-30 minutes</li>
+                                <li><strong>Cycling</strong> - 20-30 minutes</li>
+                                <li><strong>Jump Rope</strong> - 3 sets of 2 minutes</li>
+                                <li><strong>Burpees</strong> - 3 sets of 10 reps</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Cool-down Section -->
+    <div class="card shadow mb-4">
+        <div class="card-header bg-warning">
+            <h4 class="mb-0"><i class="fas fa-spa"></i> Phase 3: Cool-down (5-10 minutes)</h4>
+        </div>
+        <div class="card-body">
+            <p class="lead">Aid recovery and reduce muscle soreness</p>
+            <ul class="list-group list-group-flush">
+                <li class="list-group-item">
+                    <strong>Slow Walking</strong> - 3-5 minutes to gradually lower heart rate
+                </li>
+                <li class="list-group-item">
+                    <strong>Static Stretching</strong> - Hold each stretch for 30 seconds
+                    <ul class="mt-2">
+                        <li>Hamstring stretch</li>
+                        <li>Quadriceps stretch</li>
+                        <li>Shoulder and chest stretch</li>
+                        <li>Triceps stretch</li>
+                        <li>Lower back stretch</li>
+                    </ul>
+                </li>
+                <li class="list-group-item">
+                    <strong>Deep Breathing Exercises</strong> - 2-3 minutes of controlled breathing
+                </li>
+            </ul>
+        </div>
+    </div>
+
+    <!-- Tips Section -->
+    <div class="card shadow mb-4">
+        <div class="card-header bg-primary text-white">
+            <h4 class="mb-0"><i class="fas fa-lightbulb"></i> Pro Tips</h4>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-6">
+                    <h5><i class="fas fa-check-circle text-success"></i> Do's</h5>
+                    <ul>
+                        <li>Stay hydrated throughout your workout</li>
+                        <li>Focus on proper form over quantity</li>
+                        <li>Rest 48 hours between training same muscle groups</li>
+                        <li>Track your progress regularly</li>
+                        <li>Listen to your body and adjust intensity</li>
+                    </ul>
+                </div>
+                <div class="col-md-6">
+                    <h5><i class="fas fa-times-circle text-danger"></i> Don'ts</h5>
+                    <ul>
+                        <li>Don't skip warm-up or cool-down</li>
+                        <li>Avoid overtraining and burnout</li>
+                        <li>Don't ignore pain or discomfort</li>
+                        <li>Never compromise on form for heavier weights</li>
+                        <li>Don't train on an empty stomach</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="text-center mb-5">
+        <a href="{{ url_for('workouts.add_workout') }}" class="btn btn-success btn-lg">
+            <i class="fas fa-plus-circle"></i> Log Today's Workout
+        </a>
+    </div>
+</div>
+{% endblock %}

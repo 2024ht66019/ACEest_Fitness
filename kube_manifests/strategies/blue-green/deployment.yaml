@@ -1,0 +1,190 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aceest-web-blue
+  namespace: aceest-fitness
+  labels:
+    app: aceest-web
+    color: blue
+    strategy: blue-green
+    last_build: "TIMESTAMP_PLACEHOLDER"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: aceest-web
+      color: blue
+  template:
+    metadata:
+      labels:
+        app: aceest-web
+        color: blue
+        strategy: blue-green
+    spec:
+      initContainers:
+      - name: wait-for-db
+        image: busybox:1.36
+        command: ['sh', '-c', 'until nc -z postgres-service 5432; do echo waiting for postgres; sleep 2; done']
+      containers:
+      - name: aceest-web
+        image: dharmalakshmi15/aceest-fitness-gym:blue
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 5000
+          name: http
+        envFrom:
+        - configMapRef:
+            name: aceest-config
+        - secretRef:
+            name: aceest-secrets
+        env:
+        - name: DEPLOYMENT_COLOR
+          value: "blue"
+        - name: DEPLOYMENT_STRATEGY
+          value: "blue-green"
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 5000
+          initialDelaySeconds: 45
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 5000
+          initialDelaySeconds: 15
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aceest-web-green
+  namespace: aceest-fitness
+  labels:
+    app: aceest-web
+    color: green
+    strategy: blue-green
+    last_build: "TIMESTAMP_PLACEHOLDER"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: aceest-web
+      color: green
+  template:
+    metadata:
+      labels:
+        app: aceest-web
+        color: green
+        strategy: blue-green
+    spec:
+      initContainers:
+      - name: wait-for-db
+        image: busybox:1.36
+        command: ['sh', '-c', 'until nc -z postgres-service 5432; do echo waiting for postgres; sleep 2; done']
+      containers:
+      - name: aceest-web
+        image: dharmalakshmi15/aceest-fitness-gym:green
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 5000
+          name: http
+        envFrom:
+        - configMapRef:
+            name: aceest-config
+        - secretRef:
+            name: aceest-secrets
+        env:
+        - name: DEPLOYMENT_COLOR
+          value: "green"
+        - name: DEPLOYMENT_STRATEGY
+          value: "blue-green"
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 5000
+          initialDelaySeconds: 45
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 5000
+          initialDelaySeconds: 15
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: aceest-web-service
+  namespace: aceest-fitness
+  labels:
+    app: aceest-web
+    strategy: blue-green
+spec:
+  type: LoadBalancer
+  ports:
+  - port: 80
+    targetPort: 5000
+    protocol: TCP
+    name: http
+  selector:
+    app: aceest-web
+    color: blue  # Switch to 'green' to change traffic (managed by pipeline)
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: aceest-web-blue
+  namespace: aceest-fitness
+  labels:
+    app: aceest-web
+    color: blue
+spec:
+  type: ClusterIP
+  ports:
+  - port: 5000
+    targetPort: 5000
+    name: http
+  selector:
+    app: aceest-web
+    color: blue
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: aceest-web-green
+  namespace: aceest-fitness
+  labels:
+    app: aceest-web
+    color: green
+spec:
+  type: ClusterIP
+  ports:
+  - port: 5000
+    targetPort: 5000
+    name: http
+  selector:
+    app: aceest-web
+    color: green

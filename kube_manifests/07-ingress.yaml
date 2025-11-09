@@ -1,0 +1,33 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: aceest-web-ingress
+  namespace: aceest-fitness
+  annotations:
+    appgw.ingress.kubernetes.io/connection-draining: "true"
+    appgw.ingress.kubernetes.io/connection-draining-timeout: "30"
+    appgw.ingress.kubernetes.io/request-timeout: "30"
+    appgw.ingress.kubernetes.io/ssl-redirect: "true"
+    appgw.ingress.kubernetes.io/appgw-ssl-certificate: "aceest-tls-secret"
+    
+    # cert-manager annotations
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    cert-manager.io/acme-challenge-type: http01
+    
+spec:
+  ingressClassName: azure-application-gateway
+  rules:
+  - host: dharma.webhop.me
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: aceest-web-service
+            port:
+              number: 80
+  tls:
+  - hosts:
+    - dharma.webhop.me
+    secretName: aceest-tls-secret  # cert-manager will create this automatically

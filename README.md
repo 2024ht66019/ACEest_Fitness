@@ -18,7 +18,7 @@ ACEest Fitness is a full-stack web application designed for fitness enthusiasts 
 
 - 🔐 **User Authentication** - Secure registration and login with password hashing
 - 💪 **Workout Tracking** - Log workouts with duration, type, and automatic calorie calculation
-- 📊 **Analytics Dashboard** - Visualize progress with charts and statistics
+- 📊 **Analytics Dashboard** - Visualize progress with charts and statistics 
 - 🎯 **Workout Plans** - Create and follow personalized workout routines
 - 🍎 **Diet Tracking** - Monitor nutritional intake and diet plans
 - 📱 **Responsive Design** - Bootstrap 5 UI works on all devices

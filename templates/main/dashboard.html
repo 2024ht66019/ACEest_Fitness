@@ -82,9 +82,6 @@
                         <a href="{{ url_for('workouts.add_workout') }}" class="btn btn-primary btn-lg">
                             <i class="fas fa-plus-circle"></i> Log New Workout
                         </a>
-                        <a href="{{ url_for('analytics.progress') }}" class="btn btn-success btn-lg">
-                            <i class="fas fa-chart-line"></i> View Progress
-                        </a>
                         <a href="{{ url_for('workouts.workout_plan') }}" class="btn btn-info btn-lg">
                             <i class="fas fa-dumbbell"></i> Workout Plan
                         </a>
@@ -167,15 +164,11 @@
                     {% endif %}
                     
                     {% if current_user.bmi %}
-                        <p><strong>BMI:</strong> {{ current_user.bmi }} ({{ current_user.bmi_category }})</p>
+                        <p><strong>BMI:</strong> {{ current_user.bmi }}</p>
                     {% endif %}
                     
                     {% if current_user.bmr %}
                         <p><strong>BMR:</strong> {{ current_user.bmr|int }} kcal/day</p>
-                    {% endif %}
-                    
-                    {% if current_user.tdee %}
-                        <p><strong>TDEE:</strong> {{ current_user.tdee|int }} kcal/day</p>
                     {% endif %}
                     
                     {% if not current_user.height_cm or not current_user.weight_kg %}

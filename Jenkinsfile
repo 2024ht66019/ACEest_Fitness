@@ -844,24 +844,28 @@ def deployCanary() {
     trafficSteps.each { percent ->
         echo "📊 Scaling to ${percent}% canary traffic..."
         
-        // Calculate replicas based on percentage
-        def totalReplicas = 3  // Total desired replicas
-        def canaryReplicas = Math.ceil(totalReplicas * percent / 100).toInteger()
-        def stableReplicas = totalReplicas - canaryReplicas
-        
-        if (canaryReplicas < 1) canaryReplicas = 1
-        if (stableReplicas < 0) stableReplicas = 0
-        
         sh """
-            echo "Scaling stable to ${stableReplicas} replicas, canary to ${canaryReplicas} replicas"
+            # Calculate replicas in shell (avoiding Groovy Math operations for sandbox)
+            TOTAL_REPLICAS=3
+            PERCENT=${percent}
             
-            kubectl scale deployment aceest-web-stable -n ${K8S_NAMESPACE} --replicas=${stableReplicas}
-            kubectl scale deployment aceest-web-canary -n ${K8S_NAMESPACE} --replicas=${canaryReplicas}
+            # Calculate canary replicas (ceiling division)
+            CANARY_REPLICAS=\$(( (\$TOTAL_REPLICAS * \$PERCENT + 99) / 100 ))
+            STABLE_REPLICAS=\$(( \$TOTAL_REPLICAS - \$CANARY_REPLICAS ))
+            
+            # Ensure at least 1 canary replica if percent > 0
+            [ \$CANARY_REPLICAS -lt 1 ] && [ \$PERCENT -gt 0 ] && CANARY_REPLICAS=1
+            [ \$STABLE_REPLICAS -lt 0 ] && STABLE_REPLICAS=0
+            
+            echo "Scaling stable to \$STABLE_REPLICAS replicas, canary to \$CANARY_REPLICAS replicas"
+            
+            kubectl scale deployment aceest-web-stable -n ${K8S_NAMESPACE} --replicas=\$STABLE_REPLICAS
+            kubectl scale deployment aceest-web-canary -n ${K8S_NAMESPACE} --replicas=\$CANARY_REPLICAS
             
             echo "Waiting for scaling to complete..."
             kubectl wait --for=condition=available deployment/aceest-web-canary -n ${K8S_NAMESPACE} --timeout=120s || true
             
-            echo "Traffic distribution: ~${percent}% canary (${canaryReplicas} pods), ~${ 100 - percent }% stable (${stableReplicas} pods)"
+            echo "Traffic distribution: ~${percent}% canary (\$CANARY_REPLICAS pods), ~${ 100 - percent }% stable (\$STABLE_REPLICAS pods)"
         """
         
         if (percent < 100) {

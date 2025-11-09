@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: aceest-config
+  namespace: aceest-fitness
+  labels:
+    app: aceest-fitness-gym
+data:
+  FLASK_APP: "app.py"
+  FLASK_ENV: "production"
+  POSTGRES_DB: "aceest_fitness"
+  POSTGRES_HOST: "postgres-service"
+  POSTGRES_PORT: "5432"
+  WORKOUTS_PER_PAGE: "20"
+  GUNICORN_WORKERS: "4"
+  GUNICORN_THREADS: "2"
+  GUNICORN_TIMEOUT: "120"

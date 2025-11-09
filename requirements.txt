@@ -1,0 +1,7 @@
+# ACEest Fitness & Gym Tracker v1.0 - Requirements
+
+# Flask Framework
+Flask==3.0.0
+
+# Production server
+gunicorn==21.2.0

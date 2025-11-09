@@ -1,0 +1,196 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aceest-web-production
+  namespace: aceest-fitness
+  labels:
+    app: aceest-web
+    version: production
+    strategy: shadow
+    last_build: "TIMESTAMP_PLACEHOLDER"
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: aceest-web
+      version: production
+  template:
+    metadata:
+      labels:
+        app: aceest-web
+        version: production
+        strategy: shadow
+    spec:
+      initContainers:
+      - name: wait-for-db
+        image: busybox:1.36
+        command: ['sh', '-c', 'until nc -z postgres-service 5432; do echo waiting for postgres; sleep 2; done']
+      containers:
+      - name: aceest-web
+        image: dharmalakshmi15/aceest-fitness-gym:production
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 5000
+          name: http
+        envFrom:
+        - configMapRef:
+            name: aceest-config
+        - secretRef:
+            name: aceest-secrets
+        env:
+        - name: DEPLOYMENT_VERSION
+          value: "production"
+        - name: DEPLOYMENT_STRATEGY
+          value: "shadow"
+        - name: SHADOW_MODE
+          value: "false"
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 5000
+          initialDelaySeconds: 45
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 5000
+          initialDelaySeconds: 15
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aceest-web-shadow
+  namespace: aceest-fitness
+  labels:
+    app: aceest-web
+    version: shadow
+    strategy: shadow
+    last_build: "TIMESTAMP_PLACEHOLDER"
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: aceest-web
+      version: shadow
+  template:
+    metadata:
+      labels:
+        app: aceest-web
+        version: shadow
+        strategy: shadow
+    spec:
+      initContainers:
+      - name: wait-for-db
+        image: busybox:1.36
+        command: ['sh', '-c', 'until nc -z postgres-service 5432; do echo waiting for postgres; sleep 2; done']
+      containers:
+      - name: aceest-web
+        image: dharmalakshmi15/aceest-fitness-gym:shadow
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 5000
+          name: http
+        envFrom:
+        - configMapRef:
+            name: aceest-config
+        - secretRef:
+            name: aceest-secrets
+        env:
+        - name: DEPLOYMENT_VERSION
+          value: "shadow"
+        - name: DEPLOYMENT_STRATEGY
+          value: "shadow"
+        - name: SHADOW_MODE
+          value: "true"
+        - name: LOG_LEVEL
+          value: "DEBUG"
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 5000
+          initialDelaySeconds: 45
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 5000
+          initialDelaySeconds: 15
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: aceest-web-production
+  namespace: aceest-fitness
+  labels:
+    app: aceest-web
+    version: production
+spec:
+  type: ClusterIP
+  ports:
+  - port: 5000
+    targetPort: 5000
+    name: http
+  selector:
+    app: aceest-web
+    version: production
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: aceest-web-shadow
+  namespace: aceest-fitness
+  labels:
+    app: aceest-web
+    version: shadow
+spec:
+  type: ClusterIP
+  ports:
+  - port: 5000
+    targetPort: 5000
+    name: http
+  selector:
+    app: aceest-web
+    version: shadow
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: aceest-web-service
+  namespace: aceest-fitness
+  labels:
+    app: aceest-web
+    strategy: shadow
+spec:
+  type: LoadBalancer
+  ports:
+  - port: 80
+    targetPort: 5000
+    protocol: TCP
+    name: http
+  selector:
+    app: aceest-web
+    version: production  # Only production receives real user traffic

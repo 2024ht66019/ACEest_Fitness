@@ -22,6 +22,10 @@ class Workout(db.Model):
     exercise_name = db.Column(db.String(100), nullable=False)
     duration = db.Column(db.Integer, nullable=False)  # Duration in minutes
     
+    # Optional fields
+    notes = db.Column(db.Text, nullable=True)
+    intensity = db.Column(db.String(20), nullable=True)  # Low, Medium, High
+    
     # Timestamps
     workout_date = db.Column(db.Date, nullable=False, index=True)
     created_at = db.Column(db.DateTime, nullable=False)
@@ -47,6 +51,8 @@ class Workout(db.Model):
             'category': self.category,
             'exercise_name': self.exercise_name,
             'duration': self.duration,
+            'notes': self.notes,
+            'intensity': self.intensity,
             'workout_date': self.workout_date.isoformat() if self.workout_date else None,
             'created_at': self.created_at.isoformat() if self.created_at else None
         }

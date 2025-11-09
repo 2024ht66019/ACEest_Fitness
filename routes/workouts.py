@@ -77,13 +77,24 @@ def add_workout():
             flash('Duration must be a positive number.', 'danger')
             return render_template('workouts/add.html', categories=Config.WORKOUT_CATEGORIES)
         
-        # Create workout with current date
+        # Parse workout date
+        if workout_date_str:
+            try:
+                workout_date = datetime.strptime(workout_date_str, '%Y-%m-%d').date()
+            except ValueError:
+                workout_date = datetime.utcnow().date()
+        else:
+            workout_date = datetime.utcnow().date()
+        
+        # Create workout
         workout = Workout(
             user_id=current_user.id,
             category=category,
             exercise_name=exercise_name,
             duration=duration,
-            workout_date=datetime.utcnow().date()
+            notes=notes if notes else None,
+            intensity=intensity if intensity else None,
+            workout_date=workout_date
         )
         
         try:
@@ -140,10 +151,18 @@ def edit_workout(workout_id):
             flash('Duration must be a positive number.', 'danger')
             return render_template('workouts/edit.html', workout=workout, categories=Config.WORKOUT_CATEGORIES)
         
-        # Update workout basic fields only
+        # Update workout
         workout.category = category
         workout.exercise_name = exercise_name
         workout.duration = duration
+        workout.notes = notes if notes else None
+        workout.intensity = intensity if intensity else None
+        
+        if workout_date_str:
+            try:
+                workout.workout_date = datetime.strptime(workout_date_str, '%Y-%m-%d').date()
+            except ValueError:
+                pass
         
         try:
             db.session.commit()

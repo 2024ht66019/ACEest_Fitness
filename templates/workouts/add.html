@@ -29,10 +29,34 @@
                                    placeholder="e.g., Push-ups, Running, Squats" required>
                         </div>
 
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="duration" class="form-label">Duration (minutes) *</label>
+                                <input type="number" class="form-control" id="duration" name="duration" 
+                                       placeholder="30" min="1" required>
+                            </div>
+
+                            <div class="col-md-6 mb-3">
+                                <label for="workout_date" class="form-label">Workout Date</label>
+                                <input type="date" class="form-control" id="workout_date" name="workout_date" 
+                                       value="{{ today }}" max="{{ today }}">
+                            </div>
+                        </div>
+
                         <div class="mb-3">
-                            <label for="duration" class="form-label">Duration (minutes) *</label>
-                            <input type="number" class="form-control" id="duration" name="duration" 
-                                   placeholder="30" min="1" required>
+                            <label for="intensity" class="form-label">Intensity (Optional)</label>
+                            <select class="form-select" id="intensity" name="intensity">
+                                <option value="">Select intensity...</option>
+                                <option value="Low">Low</option>
+                                <option value="Medium">Medium</option>
+                                <option value="High">High</option>
+                            </select>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="notes" class="form-label">Notes (Optional)</label>
+                            <textarea class="form-control" id="notes" name="notes" rows="3" 
+                                      placeholder="Add any additional notes about this workout..."></textarea>
                         </div>
 
                         <div class="d-grid gap-2">
@@ -46,7 +70,26 @@
                     </form>
                 </div>
             </div>
+
+            <!-- MET Values Reference -->
+            <div class="card shadow mt-4">
+                <div class="card-header bg-info text-white">
+                    <h5 class="mb-0"><i class="fas fa-info-circle"></i> Category Guide</h5>
+                </div>
+                <div class="card-body">
+                    <ul class="mb-0">
+                        <li><strong>Warm-up:</strong> Light activities to prepare your body (stretching, light jogging)</li>
+                        <li><strong>Workout:</strong> Main exercise session (strength training, cardio, sports)</li>
+                        <li><strong>Cool-down:</strong> Low-intensity activities to recover (stretching, walking)</li>
+                    </ul>
+                </div>
+            </div>
         </div>
     </div>
 </div>
+
+<script>
+    // Set today's date as default
+    document.getElementById('workout_date').value = new Date().toISOString().split('T')[0];
+</script>
 {% endblock %}

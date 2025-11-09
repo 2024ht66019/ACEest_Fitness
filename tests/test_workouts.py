@@ -25,7 +25,8 @@ class TestWorkouts:
         response = logged_in_client.post('/workouts/add', data={
             'category': 'Workout',
             'exercise_name': 'Cycling',
-            'duration': 45
+            'duration': 45,
+            'notes': 'Evening bike ride'
         }, follow_redirects=True)
         
         assert response.status_code == 200
@@ -67,7 +68,8 @@ class TestWorkouts:
         response = logged_in_client.post(f'/workouts/{workout_id}/edit', data={
             'category': 'Workout',
             'exercise_name': 'Running',
-            'duration': 40  # Changed from 30
+            'duration': 40,  # Changed from 30
+            'notes': 'Updated morning run'
         }, follow_redirects=True)
         
         assert response.status_code == 200
@@ -112,15 +114,16 @@ class TestWorkouts:
         
         response = client.get('/workouts/')
         assert response.status_code == 200
-        # Should not see testuser's workouts (Running is testuser's workout)
-        assert b'Running' not in response.data
+        # Should not see testuser's workouts
+        assert b'Morning run' not in response.data
     
     def test_invalid_workout_duration(self, logged_in_client):
         """Test workout creation with invalid duration."""
         response = logged_in_client.post('/workouts/add', data={
             'category': 'Workout',
             'exercise_name': 'Running',
-            'duration': -10  # Invalid
+            'duration': -10,  # Invalid
+            'notes': 'Test'
         }, follow_redirects=True)
         
         assert response.status_code == 200
@@ -135,6 +138,7 @@ class TestWorkouts:
             response = logged_in_client.post('/workouts/add', data={
                 'category': category,
                 'exercise_name': f'Test {category}',
-                'duration': 30
+                'duration': 30,
+                'notes': f'Test {category}'
             }, follow_redirects=True)
             assert response.status_code == 200

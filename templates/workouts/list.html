@@ -47,6 +47,8 @@
                                 <th>Category</th>
                                 <th>Exercise</th>
                                 <th>Duration</th>
+                                <th>Calories</th>
+                                <th>Intensity</th>
                                 <th>Actions</th>
                             </tr>
                         </thead>
@@ -64,6 +66,20 @@
                                 </td>
                                 <td><strong>{{ workout.exercise_name }}</strong></td>
                                 <td>{{ workout.duration }} min</td>
+                                <td>
+                                    {% if workout.calories_burned %}
+                                        {{ workout.calories_burned|round(1) }} kcal
+                                    {% else %}
+                                        -
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if workout.intensity %}
+                                        <span class="badge bg-secondary">{{ workout.intensity }}</span>
+                                    {% else %}
+                                        -
+                                    {% endif %}
+                                </td>
                                 <td>
                                     <a href="{{ url_for('workouts.view_workout', workout_id=workout.id) }}" 
                                        class="btn btn-sm btn-outline-primary" title="View">

@@ -66,18 +66,46 @@ class User(UserMixin, db.Model):
     
     @property
     def bmi_category(self):
-        """Determine BMI category"""
+        """
+        Determine BMI category with enhanced classification
+        Updated to include more detailed categories
+        """
         if not self.bmi:
             return "Unknown"
         
-        if self.bmi < 18.5:
+        # Enhanced BMI categories
+        if self.bmi < 16:
+            return "Severely Underweight"
+        elif 16 <= self.bmi < 18.5:
             return "Underweight"
         elif 18.5 <= self.bmi < 25:
             return "Normal weight"
         elif 25 <= self.bmi < 30:
             return "Overweight"
+        elif 30 <= self.bmi < 35:
+            return "Obese Class I"
+        elif 35 <= self.bmi < 40:
+            return "Obese Class II"
         else:
-            return "Obese"
+            return "Obese Class III"
+    
+    @property
+    def health_recommendation(self):
+        """Provide health recommendation based on BMI category"""
+        if not self.bmi:
+            return "Please update your profile with height and weight information."
+        
+        recommendations = {
+            "Severely Underweight": "Consult a healthcare provider immediately for nutritional guidance.",
+            "Underweight": "Consider increasing calorie intake and strength training.",
+            "Normal weight": "Maintain current weight with balanced diet and regular exercise.",
+            "Overweight": "Focus on cardio exercises and calorie deficit diet.",
+            "Obese Class I": "Consult a fitness trainer for personalized weight loss plan.",
+            "Obese Class II": "Medical supervision recommended for weight management.",
+            "Obese Class III": "Immediate medical consultation required for health assessment."
+        }
+        
+        return recommendations.get(self.bmi_category, "Consult a healthcare provider.")
     
     @property
     def bmr(self):

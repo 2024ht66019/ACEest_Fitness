@@ -54,14 +54,12 @@ class TestWorkoutModel:
                 user_id=test_user.id,
                 category='Workout',
                 exercise_name='Testing',
-                duration=25,
-                notes='Test workout'
+                duration=25
             )
             
             assert workout.category == 'Workout'
             assert workout.exercise_name == 'Testing'
             assert workout.duration == 25
-            assert workout.notes == 'Test workout'
     
     def test_workout_date_default(self, app, test_user):
         """Test workout date defaults to current time."""

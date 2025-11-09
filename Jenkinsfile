@@ -744,32 +744,6 @@ pipeline {
                 """
             }
         }
-        
-        failure {
-            script {
-                def duration = currentBuild.durationString.replace(' and counting', '')
-                echo """
-                ╔═══════════════════════════════════════════════════════════╗
-                ║                   ❌ BUILD FAILED                        ║
-                ╚═══════════════════════════════════════════════════════════╝
-                
-                📋 Build Details:
-                ├─ Job: ${env.JOB_NAME}
-                ├─ Build: #${env.BUILD_NUMBER}
-                ├─ Duration: ${duration}
-                ├─ Branch: ${env.BRANCH_NAME}
-                └─ Commit: ${env.GIT_COMMIT_SHORT}
-                
-                🔍 Debug:
-                ├─ Console: ${env.BUILD_URL}console
-                └─ Logs: Check stage-specific logs above
-                """
-                
-                if (env.SHOULD_DEPLOY == 'true' && env.IS_PR == 'false') {
-                    echo "⚠️  Deployment may need rollback"
-                }
-            }
-        }
     }
 }
 

@@ -832,8 +832,8 @@ def deployBlueGreen() {
         kubectl patch service aceest-web-service -n ${K8S_NAMESPACE} \
             -p '{"spec":{"selector":{"color":"'\$NEW_COLOR'"}}}'
         
-        echo "✅ Blue-Green deployment complete!"
-        echo "ℹ️  Old \$CURRENT_COLOR deployment kept for rollback"
+        echo 'Blue-Green deployment complete!'
+        echo "Old \$CURRENT_COLOR deployment kept for rollback"
     """
 }
 
@@ -915,11 +915,7 @@ def deployCanary() {
         }
     }
     
-    echo """
-    ✅ Canary deployment complete!
-    ├─ 100% traffic now on canary
-    └─ Stable version can be removed after validation
-    """
+    echo "Canary deployment complete! 100% traffic now on canary. Stable version can be removed after validation."
 }
 
 /**
@@ -943,10 +939,10 @@ def deployRollingUpdate() {
         
         kubectl apply -f strategies/rolling-update/
         
-        echo "⏳ Monitoring rollout..."
+        echo 'Monitoring rollout...'
         kubectl rollout status deployment/aceest-web -n ${K8S_NAMESPACE} --timeout=300s
         
-        echo "✅ Rolling update complete!"
+        echo 'Rolling update complete!'
         kubectl get deployment aceest-web -n ${K8S_NAMESPACE}
     """
 }
@@ -999,12 +995,10 @@ spec:
       value: 100
 EOF
         
-        echo """
-        ✅ Shadow deployment complete!
-        ├─ Production: 100% user traffic
-        ├─ Shadow: Receives mirrored traffic (no user impact)
-        └─ Monitor shadow logs and metrics for validation
-        """
+        echo 'Shadow deployment complete!'
+        echo 'Production: 100% user traffic'
+        echo 'Shadow: Receives mirrored traffic (no user impact)'
+        echo 'Monitor shadow logs and metrics for validation'
     """
 }
 
@@ -1067,12 +1061,10 @@ spec:
       weight: ${trafficSplit}
 EOF
         
-        echo """
-        ✅ A/B Testing deployment complete!
-        ├─ Variant A (current): ${variantA}% traffic
-        ├─ Variant B (new): ${trafficSplit}% traffic
-        ├─ Header routing: x-variant: B → Variant B
-        └─ Monitor conversion metrics and user behavior
-        """
+        echo "A/B Testing deployment complete!"
+        echo "Variant A (current): ${variantA}% traffic"
+        echo "Variant B (new): ${trafficSplit}% traffic"
+        echo 'Header routing: x-variant: B -> Variant B'
+        echo 'Monitor conversion metrics and user behavior'
     """
 }

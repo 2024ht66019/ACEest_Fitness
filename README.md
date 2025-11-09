@@ -59,7 +59,7 @@ ACEest Fitness is a full-stack web application designed for fitness enthusiasts 
 
 ---
 
-## 📁 Project Structure
+## 📁 Project Structure 
 
 ```
 ACEest_Fitness/

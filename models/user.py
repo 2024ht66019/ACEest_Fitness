@@ -27,6 +27,17 @@ class User(UserMixin, db.Model):
     email = db.Column(db.String(120), unique=True, nullable=False, index=True)
     password_hash = db.Column(db.String(255), nullable=False)
     
+    # Profile fields
+    full_name = db.Column(db.String(100), nullable=True)
+    registration_id = db.Column(db.String(50), unique=True, nullable=True)
+    age = db.Column(db.Integer, nullable=True)
+    gender = db.Column(db.String(10), nullable=True)  # M/F/Other
+    height_cm = db.Column(db.Float, nullable=True)
+    weight_kg = db.Column(db.Float, nullable=True)
+    
+    # Calculated fields (computed properties)
+    # BMI and BMR will be calculated on-the-fly
+    
     # Timestamps
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
@@ -45,14 +56,43 @@ class User(UserMixin, db.Model):
         """Verify user password"""
         return check_password_hash(self.password_hash, password)
     
+    @property
+    def bmi(self):
+        """Calculate Body Mass Index (BMI)"""
+        if self.height_cm and self.weight_kg and self.height_cm > 0:
+            height_m = self.height_cm / 100
+            return round(self.weight_kg / (height_m ** 2), 2)
+        return None
+    
+    @property
+    def bmr(self):
+        """
+        Calculate Basal Metabolic Rate (BMR) using Mifflin-St Jeor Equation
+        BMR (Men) = 10 × weight(kg) + 6.25 × height(cm) - 5 × age(years) + 5
+        BMR (Women) = 10 × weight(kg) + 6.25 × height(cm) - 5 × age(years) - 161
+        """
+        if not all([self.weight_kg, self.height_cm, self.age, self.gender]):
+            return None
+        
+        base_bmr = (10 * self.weight_kg) + (6.25 * self.height_cm) - (5 * self.age)
+        
+        if self.gender.upper() == 'M':
+            return round(base_bmr + 5, 0)
+        elif self.gender.upper() == 'F':
+            return round(base_bmr - 161, 0)
+        else:
+            # For other genders, use average
+            return round(base_bmr - 78, 0)
+    
     def get_workout_stats(self):
         """Get user's workout statistics"""
         total_workouts = self.workouts.count()
         total_duration = sum(workout.duration for workout in self.workouts)
+        total_calories = sum(workout.calories_burned for workout in self.workouts if workout.calories_burned)
         
         return {
             'total_workouts': total_workouts,
             'total_duration': total_duration,
-            'total_calories': 0,
+            'total_calories': total_calories,
             'average_duration': round(total_duration / total_workouts, 1) if total_workouts > 0 else 0
         }

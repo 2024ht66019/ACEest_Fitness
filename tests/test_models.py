@@ -55,12 +55,14 @@ class TestWorkoutModel:
                 category='Workout',
                 exercise_name='Testing',
                 duration=25,
+                calories_burned=250,
                 notes='Test workout'
             )
             
             assert workout.category == 'Workout'
             assert workout.exercise_name == 'Testing'
             assert workout.duration == 25
+            assert workout.calories_burned == 250
             assert workout.notes == 'Test workout'
     
     def test_workout_date_default(self, app, test_user):
@@ -71,7 +73,8 @@ class TestWorkoutModel:
                 user_id=test_user.id,
                 category='Workout',
                 exercise_name='Testing',
-                duration=20
+                duration=20,
+                calories_burned=200
             )
             after = datetime.now(timezone.utc).date()
             
@@ -85,7 +88,8 @@ class TestWorkoutModel:
                 user_id=test_user.id,
                 category='Workout',
                 exercise_name='Running',
-                duration=30
+                duration=30,
+                calories_burned=300
             )
             
             repr_str = repr(workout)
@@ -98,3 +102,19 @@ class TestWorkoutModel:
             assert workout.user is not None
             assert isinstance(workout.user, User)
             assert workout.user.username == 'testuser'
+    
+    def test_workout_calculation_fields(self, app, test_user):
+        """Test workout numeric fields."""
+        with app.app_context():
+            workout = Workout(
+                user_id=test_user.id,
+                category='Workout',
+                exercise_name='Cycling',
+                duration=60,
+                calories_burned=500,
+                notes='Long ride'
+            )
+            
+            # Calculate calories per minute
+            calories_per_minute = workout.calories_burned / workout.duration
+            assert abs(calories_per_minute - 8.33) < 0.1

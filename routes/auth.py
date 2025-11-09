@@ -106,8 +106,39 @@ def logout():
     return redirect(url_for('main.index'))
 
 
-@auth_bp.route('/profile')
+@auth_bp.route('/profile', methods=['GET', 'POST'])
 @login_required
 def profile():
-    """User profile page - view only in v1.2.2"""
-    return render_template('auth/profile.html')
+    """User profile management"""
+    if request.method == 'POST':
+        # Update profile information
+        current_user.full_name = request.form.get('full_name', '').strip()
+        current_user.registration_id = request.form.get('registration_id', '').strip()
+        
+        try:
+            current_user.age = int(request.form.get('age', 0))
+        except ValueError:
+            current_user.age = None
+        
+        current_user.gender = request.form.get('gender', '').strip().upper()
+        
+        try:
+            current_user.height_cm = float(request.form.get('height_cm', 0))
+        except ValueError:
+            current_user.height_cm = None
+        
+        try:
+            current_user.weight_kg = float(request.form.get('weight_kg', 0))
+        except ValueError:
+            current_user.weight_kg = None
+        
+        try:
+            db.session.commit()
+            flash('Profile updated successfully!', 'success')
+        except Exception as e:
+            db.session.rollback()
+            flash('An error occurred while updating profile.', 'danger')
+        
+        return redirect(url_for('auth.profile'))
+    
+    return render_template('auth/profile.html', user=current_user)

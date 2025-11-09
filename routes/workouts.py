@@ -97,6 +97,11 @@ def add_workout():
             workout_date=workout_date
         )
         
+        # Calculate calories
+        met_value = Config.MET_VALUES.get(category, 5.0)
+        weight = current_user.weight_kg if current_user.weight_kg else 70.0  # Default weight
+        workout.calculate_calories(weight, met_value)
+        
         try:
             db.session.add(workout)
             db.session.commit()
@@ -163,6 +168,11 @@ def edit_workout(workout_id):
                 workout.workout_date = datetime.strptime(workout_date_str, '%Y-%m-%d').date()
             except ValueError:
                 pass
+        
+        # Recalculate calories
+        met_value = Config.MET_VALUES.get(category, 5.0)
+        weight = current_user.weight_kg if current_user.weight_kg else 70.0
+        workout.calculate_calories(weight, met_value)
         
         try:
             db.session.commit()

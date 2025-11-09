@@ -88,7 +88,8 @@ class TestWorkouts:
                 user_id=test_user.id,
                 category='Workout',
                 exercise_name='Swimming',
-                duration=20
+                duration=20,
+                calories_burned=200
             )
             app.extensions['sqlalchemy'].session.add(workout)
             app.extensions['sqlalchemy'].session.commit()

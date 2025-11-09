@@ -33,6 +33,13 @@ class Config:
     # Pagination
     WORKOUTS_PER_PAGE = 20
     
+    # MET values for different exercise categories
+    MET_VALUES = {
+        'Warm-up': 3.0,
+        'Workout': 6.0,
+        'Cool-down': 2.5
+    }
+    
     # Exercise categories
     WORKOUT_CATEGORIES = ['Warm-up', 'Workout', 'Cool-down']
 

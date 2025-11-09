@@ -1,6 +1,6 @@
 """ACEest Fitness & Gym Management System
 Main application entry point
-Version: 1.2
+Version: 1.1
 """
 
 from flask import Flask

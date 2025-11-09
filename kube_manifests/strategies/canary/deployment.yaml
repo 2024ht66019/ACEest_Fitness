@@ -1,0 +1,195 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aceest-web-stable
+  namespace: aceest-fitness
+  labels:
+    app: aceest-web
+    version: stable
+    strategy: canary
+    last_build: "TIMESTAMP_PLACEHOLDER"
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: aceest-web
+      version: stable
+  template:
+    metadata:
+      labels:
+        app: aceest-web
+        version: stable
+        strategy: canary
+    spec:
+      initContainers:
+      - name: wait-for-db
+        image: busybox:1.36
+        command: ['sh', '-c', 'until nc -z postgres-service 5432; do echo waiting for postgres; sleep 2; done']
+      containers:
+      - name: aceest-web
+        image: dharmalakshmi15/aceest-fitness-gym:stable
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 5000
+          name: http
+        envFrom:
+        - configMapRef:
+            name: aceest-config
+        - secretRef:
+            name: aceest-secrets
+        env:
+        - name: DEPLOYMENT_VERSION
+          value: "stable"
+        - name: DEPLOYMENT_STRATEGY
+          value: "canary"
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 5000
+          initialDelaySeconds: 45
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 5000
+          initialDelaySeconds: 15
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aceest-web-canary
+  namespace: aceest-fitness
+  labels:
+    app: aceest-web
+    version: canary
+    strategy: canary
+    last_build: "TIMESTAMP_PLACEHOLDER"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: aceest-web
+      version: canary
+  template:
+    metadata:
+      labels:
+        app: aceest-web
+        version: canary
+        strategy: canary
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "5000"
+        prometheus.io/path: "/metrics"
+    spec:
+      initContainers:
+      - name: wait-for-db
+        image: busybox:1.36
+        command: ['sh', '-c', 'until nc -z postgres-service 5432; do echo waiting for postgres; sleep 2; done']
+      containers:
+      - name: aceest-web
+        image: dharmalakshmi15/aceest-fitness-gym:canary
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 5000
+          name: http
+        envFrom:
+        - configMapRef:
+            name: aceest-config
+        - secretRef:
+            name: aceest-secrets
+        env:
+        - name: DEPLOYMENT_VERSION
+          value: "canary"
+        - name: DEPLOYMENT_STRATEGY
+          value: "canary"
+        - name: CANARY_ENABLED
+          value: "true"
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 5000
+          initialDelaySeconds: 45
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 5000
+          initialDelaySeconds: 15
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: aceest-web-stable
+  namespace: aceest-fitness
+  labels:
+    app: aceest-web
+    version: stable
+spec:
+  type: ClusterIP
+  ports:
+  - port: 5000
+    targetPort: 5000
+    name: http
+  selector:
+    app: aceest-web
+    version: stable
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: aceest-web-canary
+  namespace: aceest-fitness
+  labels:
+    app: aceest-web
+    version: canary
+spec:
+  type: ClusterIP
+  ports:
+  - port: 5000
+    targetPort: 5000
+    name: http
+  selector:
+    app: aceest-web
+    version: canary
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: aceest-web-service
+  namespace: aceest-fitness
+  labels:
+    app: aceest-web
+    strategy: canary
+spec:
+  type: LoadBalancer
+  ports:
+  - port: 80
+    targetPort: 5000
+    protocol: TCP
+    name: http
+  selector:
+    app: aceest-web  # Selects both stable and canary (traffic split via replica scaling)

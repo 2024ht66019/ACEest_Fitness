@@ -1,0 +1,31 @@
+# GitHub Actions workflow to notify Jenkins on push/PR events
+# This is an alternative to webhooks if your Jenkins is not publicly accessible
+
+name: Notify Jenkins
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+      - 'feature/**'
+      - 'hotfix/**'
+      - 'release/**'
+  pull_request:
+    types: [opened, synchronize, reopened, closed]
+  create:
+    branches:
+      - '**'
+  delete:
+    branches:
+      - '**'
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Jenkins Multi-branch Scan
+        run: |
+          curl -X POST \
+            -u ${{ secrets.JENKINS_USER }}:${{ secrets.JENKINS_TOKEN }} \
+            "${{ secrets.JENKINS_URL }}/job/aceest-fitness-multibranch/build?delay=0"

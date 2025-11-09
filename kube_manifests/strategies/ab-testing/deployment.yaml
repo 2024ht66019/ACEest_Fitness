@@ -1,0 +1,196 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aceest-web-variant-a
+  namespace: aceest-fitness
+  labels:
+    app: aceest-web
+    variant: a
+    strategy: ab-testing
+    last_build: "TIMESTAMP_PLACEHOLDER"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: aceest-web
+      variant: a
+  template:
+    metadata:
+      labels:
+        app: aceest-web
+        variant: a
+        strategy: ab-testing
+    spec:
+      initContainers:
+      - name: wait-for-db
+        image: busybox:1.36
+        command: ['sh', '-c', 'until nc -z postgres-service 5432; do echo waiting for postgres; sleep 2; done']
+      containers:
+      - name: aceest-web
+        image: dharmalakshmi15/aceest-fitness-gym:variant-a
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 5000
+          name: http
+        envFrom:
+        - configMapRef:
+            name: aceest-config
+        - secretRef:
+            name: aceest-secrets
+        env:
+        - name: DEPLOYMENT_VERSION
+          value: "variant-a"
+        - name: DEPLOYMENT_STRATEGY
+          value: "ab-testing"
+        - name: AB_TEST_VARIANT
+          value: "A"
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 5000
+          initialDelaySeconds: 45
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 5000
+          initialDelaySeconds: 15
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aceest-web-variant-b
+  namespace: aceest-fitness
+  labels:
+    app: aceest-web
+    variant: b
+    strategy: ab-testing
+    last_build: "TIMESTAMP_PLACEHOLDER"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: aceest-web
+      variant: b
+  template:
+    metadata:
+      labels:
+        app: aceest-web
+        variant: b
+        strategy: ab-testing
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "5000"
+    spec:
+      initContainers:
+      - name: wait-for-db
+        image: busybox:1.36
+        command: ['sh', '-c', 'until nc -z postgres-service 5432; do echo waiting for postgres; sleep 2; done']
+      containers:
+      - name: aceest-web
+        image: dharmalakshmi15/aceest-fitness-gym:variant-b
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 5000
+          name: http
+        envFrom:
+        - configMapRef:
+            name: aceest-config
+        - secretRef:
+            name: aceest-secrets
+        env:
+        - name: DEPLOYMENT_VERSION
+          value: "variant-b"
+        - name: DEPLOYMENT_STRATEGY
+          value: "ab-testing"
+        - name: AB_TEST_VARIANT
+          value: "B"
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 5000
+          initialDelaySeconds: 45
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 5000
+          initialDelaySeconds: 15
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: aceest-web-variant-a
+  namespace: aceest-fitness
+  labels:
+    app: aceest-web
+    variant: a
+spec:
+  type: ClusterIP
+  ports:
+  - port: 5000
+    targetPort: 5000
+    name: http
+  selector:
+    app: aceest-web
+    variant: a
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: aceest-web-variant-b
+  namespace: aceest-fitness
+  labels:
+    app: aceest-web
+    variant: b
+spec:
+  type: ClusterIP
+  ports:
+  - port: 5000
+    targetPort: 5000
+    name: http
+  selector:
+    app: aceest-web
+    variant: b
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: aceest-web-service
+  namespace: aceest-fitness
+  labels:
+    app: aceest-web
+    strategy: ab-testing
+spec:
+  type: LoadBalancer
+  ports:
+  - port: 80
+    targetPort: 5000
+    protocol: TCP
+    name: http
+  selector:
+    app: aceest-web  # Selects both variants (traffic split managed by Istio)

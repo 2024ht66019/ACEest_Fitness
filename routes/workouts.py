@@ -174,3 +174,17 @@ def delete_workout(workout_id):
         flash('An error occurred while deleting the workout.', 'danger')
     
     return redirect(url_for('workouts.list_workouts'))
+
+
+@workouts_bp.route('/plan')
+@login_required
+def workout_plan():
+    """Display workout plan guide"""
+    return render_template('workouts/plan.html')
+
+
+@workouts_bp.route('/diet')
+@login_required
+def diet_guide():
+    """Display diet guide"""
+    return render_template('workouts/diet.html')

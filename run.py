@@ -5,7 +5,6 @@ Provides different modes for running the application
 """
 
 import os
-import sys
 
 from app import create_app, db
 from config import Config

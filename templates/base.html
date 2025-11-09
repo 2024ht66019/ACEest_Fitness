@@ -44,6 +44,11 @@
                                 <i class="fas fa-list"></i> My Workouts
                             </a>
                         </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{{ url_for('analytics.progress') }}">
+                                <i class="fas fa-chart-line"></i> Progress
+                            </a>
+                        </li>
                         <li class="nav-item dropdown">
                             <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
                                 <i class="fas fa-user"></i> {{ current_user.username }}

@@ -32,6 +32,17 @@ class TestAPIEndpoints:
         assert response.status_code == 200
         assert b'Dashboard' in response.data or b'workout' in response.data.lower()
     
+    def test_analytics_page_requires_authentication(self, client):
+        """Test analytics requires login."""
+        response = client.get('/analytics/')
+        assert response.status_code == 302
+    
+    def test_analytics_page_loads_when_authenticated(self, logged_in_client):
+        """Test authenticated user can access analytics."""
+        response = logged_in_client.get('/analytics/')
+        assert response.status_code == 200
+        assert b'Analytics' in response.data or b'statistics' in response.data.lower()
+    
     def test_404_error_page(self, client):
         """Test 404 error handling."""
         response = client.get('/nonexistent-page')

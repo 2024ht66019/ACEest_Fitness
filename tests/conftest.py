@@ -71,7 +71,6 @@ def init_database(app):
             category='Workout',
             exercise_name='Running',
             duration=30,
-            calories_burned=300,
             notes='Morning run',
             workout_date=datetime.now(timezone.utc).date()
         )

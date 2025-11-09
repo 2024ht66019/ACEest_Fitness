@@ -2,7 +2,7 @@
 Workout model for tracking exercise sessions
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from app import db
 
 
@@ -28,9 +28,19 @@ class Workout(db.Model):
     intensity = db.Column(db.String(20), nullable=True)  # Low, Medium, High
     
     # Timestamps
-    workout_date = db.Column(db.Date, default=datetime.utcnow().date, nullable=False, index=True)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    workout_date = db.Column(db.Date, nullable=False, index=True)
+    created_at = db.Column(db.DateTime, nullable=False)
+    updated_at = db.Column(db.DateTime, nullable=False)
+    
+    def __init__(self, **kwargs):
+        """Initialize workout with default timestamps if not provided"""
+        if 'workout_date' not in kwargs:
+            kwargs['workout_date'] = datetime.now(timezone.utc).date()
+        if 'created_at' not in kwargs:
+            kwargs['created_at'] = datetime.now(timezone.utc)
+        if 'updated_at' not in kwargs:
+            kwargs['updated_at'] = datetime.now(timezone.utc)
+        super().__init__(**kwargs)
     
     def __repr__(self):
         return f'<Workout {self.exercise_name} - {self.duration}min>'

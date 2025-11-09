@@ -477,6 +477,299 @@ Phase 5 commits:
 
 ---
 
-**Document Version**: 2.0  
+**Document Version**: 3.0  
 **Last Updated**: 2025-11-09  
-**Status**: Complete restructuring finished; all flask_app references removed; tests passing at 65% coverage; Jenkins pipeline ready for full execution
+**Status**: Complete restructuring finished; parameterized deployment strategies implemented; Istio dependencies removed; automatic strategy cleanup added; all tests passing
+
+---
+
+## Phase 6: Parameterized Deployment Strategies (Session 3)
+
+### Problem 6.1: Jenkinsfile Syntax Errors After Parameter Addition
+**Error**: Multiple Groovy compilation errors when adding deployment strategy parameters  
+**Root Cause**: Unicode emoji and box-drawing characters in heredoc strings causing parser failures  
+**Solution**: Replaced all special Unicode characters with ASCII-safe alternatives
+- Removed emojis: ✅, ℹ️, ⏳, 🔵, 🟢, etc.
+- Removed box-drawing: ├─, └─, →
+- Changed triple-quoted echo blocks to simple single-line echo statements
+
+### Problem 6.2: Duplicate Post Condition
+**Error**: `Duplicate build condition name: "failure" @ line 656`  
+**Root Cause**: Pipeline post block had two separate `failure` conditions - one for rollback logic, one for error reporting  
+**Solution**: Consolidated into single failure block combining rollback + error messaging; removed duplicate
+
+### Problem 6.3: Istio VirtualService Not Found
+**Error**: `error: the server doesn't have a resource type "virtualservice"` during Canary deployment  
+**Root Cause**: Deployment strategies (Canary, Shadow, A/B Testing) required Istio service mesh CRDs not installed on cluster  
+**User Requirement**: Chose Option B - modify strategies to work without Istio (simpler, immediate functionality)
+
+**Solution - Native Kubernetes Implementations**:
+
+#### 6.3.1: Canary Deployment (Replica-Based)
+- **Before**: Istio VirtualService with precise traffic percentage control
+- **After**: Native K8s replica scaling for approximate traffic distribution
+- **Implementation**:
+  ```bash
+  # Calculate replicas based on percentage
+  TOTAL_REPLICAS=3
+  CANARY_REPLICAS=$(( (TOTAL * PERCENT + 99) / 100 ))  # Ceiling division
+  STABLE_REPLICAS=$(( TOTAL - CANARY ))
+  ```
+- **Traffic Steps**: 10% → 50% → 100% via pod count scaling
+- **Benefits**: No service mesh dependency, works immediately
+- **Trade-off**: Approximate percentages vs precise Istio control
+
+#### 6.3.2: Shadow Deployment (Simplified)
+- **Before**: Istio VirtualService for automatic traffic mirroring
+- **After**: Parallel deployment without automatic mirroring
+- **Implementation**: Shadow pods deployed separately for manual testing via port-forward
+- **Access**: `kubectl port-forward deployment/aceest-web-shadow 8080:5000`
+- **Benefits**: Zero user impact, no Istio requirement
+- **Trade-off**: Manual testing instead of automatic traffic duplication
+
+#### 6.3.3: A/B Testing (Replica-Based)
+- **Before**: Istio VirtualService for header-based routing and precise traffic splits
+- **After**: Replica count distribution via shared service load balancing
+- **Implementation**:
+  ```bash
+  # For 50/50 split with 4 total replicas
+  VARIANT_A_REPLICAS=2
+  VARIANT_B_REPLICAS=2
+  ```
+- **Benefits**: Simple K8s native approach
+- **Trade-off**: Approximate distribution, no header-based routing
+
+#### 6.3.4: Manifest Cleanup
+- **Removed** from `kube_manifests/strategies/shadow/deployment.yaml`:
+  - VirtualService resource definition
+  - DestinationRule resource definition
+  - Istio sidecar injection annotation
+- **Updated** comments in `kube_manifests/strategies/canary/deployment.yaml`:
+  - Changed: "traffic split managed by Istio VirtualService"
+  - To: "traffic split via replica scaling"
+
+### Problem 6.4: Jenkins Sandbox Security Exception
+**Error**: `RejectedAccessException: No such static method found: staticMethod java.lang.Math ceil`  
+**Root Cause**: Groovy `Math.ceil()` blocked by Jenkins script security sandbox  
+**Solution**: Moved all mathematical calculations from Groovy to bash shell arithmetic
+- Replaced: `def canaryReplicas = Math.ceil(totalReplicas * percent / 100).toInteger()`
+- With: `CANARY_REPLICAS=$(( (TOTAL_REPLICAS * PERCENT + 99) / 100 ))`
+- All replica calculations now happen in shell where unrestricted
+
+### Problem 6.5: No Resource Cleanup Between Strategy Switches
+**User Requirement**: "If switching from one deployment strategy to another, scale down previous strategy's replicas before deploying new one"  
+**Impact**: Multiple strategies running simultaneously, wasting cluster resources (important for 2-node cluster)
+
+**Solution - Automatic Strategy Cleanup**:
+- **Created** `cleanupOtherStrategies(String currentStrategy)` function
+- **Logic**: Scale all non-current strategy deployments to 0 replicas
+- **Strategy Mappings**:
+  - Blue-Green: `aceest-web-blue`, `aceest-web-green`
+  - Canary: `aceest-web-stable`, `aceest-web-canary`
+  - Rolling Update: `aceest-web`
+  - Shadow: `aceest-web-production`, `aceest-web-shadow`
+  - A/B Testing: `aceest-web-variant-a`, `aceest-web-variant-b`
+- **Execution**: Called before strategy-specific deployment in main pipeline
+- **Benefits**:
+  - Prevents resource conflicts
+  - Optimizes 2-node cluster usage
+  - Clean state for each deployment
+  - Safe switching between strategies
+
+**Example Flow**:
+```
+Current State: Canary running (stable: 2 pods, canary: 1 pod)
+User Action: Deploy Blue-Green strategy
+Pipeline Execution:
+  1. Cleanup: Scale stable=0, canary=0
+  2. Deploy: Apply blue-green manifests
+  3. Result: Only blue/green pods active
+```
+
+### Problem 6.6: Resource Optimization for 2-Node Cluster
+**User Specification**: "node x2 = 2 cpu, 4gib ram. make sure resources are sufficient"  
+**Analysis**:
+- Total Capacity: 4 CPU cores, 8GB RAM
+- System Overhead: ~20% (0.8 CPU, 1.6GB)
+- Available: 3.2 CPU cores, 6.4GB RAM
+- Original Shadow Strategy: 6 pods = 1750m CPU (EXCEEDED)
+
+**Solution - Replica Optimization**:
+```yaml
+# Before → After
+Blue-Green:     2+2=4 pods → 1+1=2 pods (1250m → 750m CPU)
+Canary:         3+1=4 pods → 2+1=3 pods (1250m → 1000m CPU)
+Shadow:         3+3=6 pods → 2+2=4 pods (1750m → 1250m CPU) ⚠️ CRITICAL
+A/B Testing:    2+2=4 pods → 1+1=2 pods (1250m → 750m CPU)
+Rolling Update: 3 base pods → 2 base pods (1250m → 1000m CPU during surge)
+```
+
+**Per-Pod Resources**:
+- Request: 250m CPU, 256Mi memory
+- Limit: 500m CPU, 512Mi memory
+- PostgreSQL: 250m CPU request, 1000m CPU limit, 1Gi memory limit
+
+**Created Documentation**: `docs/CLUSTER-RESOURCES.md` with:
+- Resource requirement calculations per strategy
+- Monitoring commands
+- Scaling recommendations
+- HA considerations
+
+### Implementation Summary
+
+**Files Modified**:
+1. **Jenkinsfile** (8 changes):
+   - Fixed Unicode character issues in echo statements
+   - Removed duplicate failure post block
+   - Replaced Istio VirtualService patching with replica scaling (Canary)
+   - Simplified Shadow deployment (removed traffic mirroring)
+   - Simplified A/B Testing (replica-based distribution)
+   - Moved Math.ceil() to bash arithmetic
+   - Added `cleanupOtherStrategies()` function
+   - Integrated cleanup call before strategy deployment
+
+2. **kube_manifests/strategies/shadow/deployment.yaml**:
+   - Removed VirtualService resource definition
+   - Removed DestinationRule resource definition
+   - Removed Istio sidecar injection annotation
+
+3. **kube_manifests/strategies/canary/deployment.yaml**:
+   - Updated comment: "traffic split via replica scaling"
+
+4. **kube_manifests/strategies/*/deployment.yaml** (all 5 strategies):
+   - Reduced replica counts to fit 2-node cluster capacity
+   - Blue-Green: 2→1 per color
+   - Canary: stable 3→2
+   - Shadow: 3→2 per variant (6→4 total)
+   - A/B Testing: 2→1 per variant
+   - Rolling Update: 3→2 base
+
+5. **docs/DEPLOYMENT-STRATEGIES.md**:
+   - Updated Canary section: "Implementation: Native K8s replica scaling"
+   - Updated Shadow section: "Simplified (no traffic mirroring)"
+   - Updated A/B Testing section: "Replica-based traffic distribution"
+   - Added notes about optional Istio installation
+
+6. **docs/CLUSTER-RESOURCES.md** (new file):
+   - Cluster specifications
+   - Per-strategy resource requirements
+   - Optimization summary
+   - Monitoring commands
+   - Scaling recommendations
+
+**Pipeline Features Added**:
+
+1. **9 Configurable Parameters**:
+   - `DEPLOYMENT_STRATEGY`: auto, blue-green, canary, rolling-update, shadow, ab-testing
+   - `SKIP_TESTS`, `SKIP_SONAR`, `SKIP_SECURITY_SCAN`: Boolean flags
+   - `CANARY_TRAFFIC_STEPS`: "10,50,100" (customizable)
+   - `CANARY_WAIT_TIME`: "120" seconds (monitoring interval)
+   - `AB_TRAFFIC_SPLIT`: "50" (percentage for variant B)
+   - `AUTO_ROLLBACK`: true (automatic on failure)
+   - `MANUAL_APPROVAL`: false (optional production gate)
+
+2. **Branch-Based Auto Mode**:
+   - `main` → blue-green
+   - `develop` → canary
+   - `feature/*` → rolling-update
+   - Overridable via DEPLOYMENT_STRATEGY parameter
+
+3. **Automatic Rollback**:
+   - Pre-deployment state capture
+   - Rollback on deployment failure
+   - Works with AUTO_ROLLBACK parameter
+
+4. **Strategy Cleanup**:
+   - Automatic detection of previous strategy deployments
+   - Scaling to 0 replicas before new deployment
+   - Prevents resource conflicts
+
+5. **Enhanced Logging**:
+   - Deployment strategy information in Branch Information stage
+   - Canary traffic step progress
+   - Cleanup operation details
+   - Resource distribution summaries
+
+### Technical Decisions
+
+**Why Replica-Based Instead of Service Mesh?**
+- ✅ Immediate functionality (no Istio installation required)
+- ✅ Simpler architecture, easier to understand
+- ✅ Lower resource overhead (no sidecar proxies)
+- ✅ Sufficient for most use cases
+- ⚠️ Trade-off: Approximate traffic percentages vs precise control
+- 📝 Documentation includes Istio installation guide for users wanting advanced features
+
+**Why Automatic Cleanup?**
+- ✅ Prevents resource exhaustion on small clusters
+- ✅ Clean state for each deployment
+- ✅ User-requested feature
+- ✅ Graceful (checks existence before scaling)
+- ⚠️ Safe: uses `|| true` to avoid failure if deployment doesn't exist
+
+**Why Shell Arithmetic Instead of Groovy Math?**
+- ✅ Avoids Jenkins sandbox security restrictions
+- ✅ Portable (works in any Unix shell)
+- ✅ No additional approvals needed
+- ⚠️ Integer-only arithmetic (acceptable for replica counts)
+
+### Verification Results
+
+✅ **Jenkinsfile syntax**: Parses cleanly, no Groovy errors  
+✅ **Canary deployment**: Replica-based scaling works without Istio  
+✅ **Shadow deployment**: Simplified version deploys successfully  
+✅ **A/B testing**: Replica distribution functional  
+✅ **Strategy cleanup**: Scales down other strategies correctly  
+✅ **Resource optimization**: All strategies fit 2-node cluster  
+✅ **Documentation**: 3 docs updated, 1 new resource guide created  
+
+### Current Status (After Phase 6)
+
+#### Completed
+✅ Parameterized deployment strategies (9 parameters)  
+✅ Removed Istio dependencies (Canary, Shadow, A/B Testing)  
+✅ Automatic strategy cleanup before deployment  
+✅ Resource optimization for 2-node cluster  
+✅ Math.ceil() sandbox issue resolved  
+✅ Jenkinsfile syntax errors fixed  
+✅ Documentation updated (4 files)  
+
+#### Pipeline Ready
+🚀 All 5 deployment strategies functional without Istio  
+🚀 Automatic cleanup prevents resource conflicts  
+🚀 Resource requirements optimized for cluster capacity  
+🚀 Branch-based auto-selection working  
+🚀 Manual approval and rollback features integrated  
+
+### Session 3 Lessons Learned
+
+1. **Service Mesh Trade-offs**: Istio provides powerful traffic management but adds complexity. Native K8s approaches often sufficient for most use cases.
+
+2. **Replica-Based Traffic Control**: Approximate traffic distribution via pod scaling is simple and effective. Calculate replicas carefully to avoid 0-pod situations.
+
+3. **Jenkins Sandbox Security**: Always prefer shell-based calculations over Groovy Math operations to avoid approval requirements.
+
+4. **Resource Planning**: Small clusters (2-node) require careful replica count optimization. Always account for system overhead (~20%).
+
+5. **Strategy Isolation**: Automatic cleanup between strategy switches prevents resource conflicts and ensures clean deployments.
+
+6. **Unicode in Pipeline Scripts**: Avoid emoji and special characters in Groovy heredocs. ASCII-safe alternatives prevent parser issues.
+
+7. **Documentation Synchronization**: When changing implementation approach (Istio → native K8s), update all related documentation immediately.
+
+### Phase 6 Commits
+
+Key commits during Session 3:
+- `[commit]` - Add parameterized deployment strategies with 9 parameters
+- `[commit]` - Remove Istio dependencies from Canary/Shadow/A/B strategies
+- `[commit]` - Fix Jenkinsfile syntax errors (Unicode characters)
+- `[commit]` - Remove duplicate failure post block
+- `[commit]` - Replace Math.ceil() with shell arithmetic
+- `[commit]` - Add cleanupOtherStrategies() function
+- `[commit]` - Optimize replica counts for 2-node cluster
+- `[commit]` - Update deployment strategy documentation
+- `[commit]` - Create CLUSTER-RESOURCES.md guide
+
+---
+
+**End of Phase 6 Summary**

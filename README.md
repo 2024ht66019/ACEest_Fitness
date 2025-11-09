@@ -63,24 +63,25 @@ ACEest Fitness is a full-stack web application designed for fitness enthusiasts 
 
 ```
 ACEest_Fitness/
-├── flask_app/                    # Main Flask application
-│   ├── app.py                    # Application factory
-│   ├── config.py                 # Configuration settings
-│   ├── run.py                    # Application entry point
-│   ├── requirements.txt          # Python dependencies
-│   ├── models/                   # Database models
-│   │   ├── user.py              # User model
-│   │   └── workout.py           # Workout model
-│   ├── routes/                   # Application routes
-│   │   ├── auth.py              # Authentication routes
-│   │   ├── main.py              # Main routes
-│   │   ├── workouts.py          # Workout routes
-│   │   └── analytics.py         # Analytics routes
-│   ├── templates/                # HTML templates
-│   ├── static/                   # CSS, JS, images
-│   ├── Dockerfile                # Multi-stage Docker build
-│   ├── docker-compose.yml        # Multi-container setup
-│   └── nginx.conf                # Nginx reverse proxy config
+├── app.py                        # Flask application entry point
+├── config.py                     # Configuration settings
+├── run.py                        # Application runner
+├── requirements.txt              # Python dependencies
+├── requirements-test.txt         # Test dependencies
+├── utils.py                      # Utility functions
+│
+├── models/                       # Database models
+│   ├── user.py                  # User model
+│   └── workout.py               # Workout model
+│
+├── routes/                       # Application routes
+│   ├── auth.py                  # Authentication routes
+│   ├── main.py                  # Main routes
+│   ├── workouts.py              # Workout routes
+│   └── analytics.py             # Analytics routes
+│
+├── templates/                    # HTML templates
+├── static/                       # CSS, JS, images
 │
 ├── tests/                        # Automated tests
 │   ├── conftest.py              # Pytest fixtures
@@ -93,18 +94,28 @@ ACEest_Fitness/
 │   ├── 00-namespace.yaml        # Namespace definition
 │   ├── 01-configmap.yaml        # Configuration
 │   ├── 02-secrets.yaml          # Secrets management
-│   ├── 03-postgres-statefulset.yaml  # Database
+│   ├── 03-postgres-statefulset.yaml  # PostgreSQL database
 │   ├── 04-hpa.yaml              # Horizontal Pod Autoscaler
 │   ├── 05-resource-quotas.yaml  # Resource limits
 │   ├── 06-network-policies.yaml # Network security
 │   ├── 07-ingress.yaml          # Ingress controller
-│   ├── strategies/              # Deployment strategies
-│   │   ├── rolling-update/
-│   │   ├── blue-green/
-│   │   ├── canary/
-│   │   ├── ab-testing/
-│   │   └── shadow/
-│   └── deploy.sh                # Deployment automation script
+│   └── strategies/              # Deployment strategies
+│       ├── rolling-update/      # Standard K8s rolling update
+│       ├── blue-green/          # Zero-downtime deployment
+│       ├── canary/              # Gradual traffic shift
+│       ├── ab-testing/          # A/B comparison testing
+│       └── shadow/              # Parallel testing
+│
+├── docs/                         # Documentation
+│   ├── DEPLOYMENT-STRATEGIES.md # Deployment strategies guide
+│   ├── JENKINS-PARAMETERS.md    # Pipeline parameters reference
+│   ├── DEPLOYMENT-IMPLEMENTATION.md  # Implementation details
+│   ├── DEPLOYMENT-DIAGRAM.md    # Strategy diagrams
+│   ├── CLUSTER-RESOURCES.md     # Resource optimization guide
+│   ├── GITHUB-JENKINS-WEBHOOK.md     # GitHub webhook setup
+│   ├── JENKINS-PIPELINE.md      # Jenkins CI/CD guide
+│   ├── JENKINS-QUICKSTART.md    # Jenkins quick start
+│   └── PIPELINE_DEBUG_SUMMARY.md     # Pipeline debugging
 │
 ├── terraform/                    # Infrastructure as Code
 │   ├── main.tf                  # Main Terraform configuration
@@ -113,34 +124,33 @@ ACEest_Fitness/
 │       ├── aks/                 # AKS cluster module
 │       └── networking/          # Network module
 │
-├── .github/workflows/            # GitHub Actions
-│   └── notify-jenkins.yml       # Jenkins webhook trigger
-│
-├── Jenkinsfile                   # Single-branch CI/CD pipeline
-├── Jenkinsfile.multibranch      # Multi-branch CI/CD pipeline
+├── Dockerfile                    # Multi-stage Docker build
+├── docker-compose.yml            # Multi-container setup
+├── Jenkinsfile                   # Parameterized CI/CD pipeline
 ├── pytest.ini                    # Pytest configuration
 ├── sonar-project.properties     # SonarQube settings
-├── requirements-test.txt        # Test dependencies
 ├── .gitignore                   # Git ignore rules
 └── README.md                    # This file
 ```
 
 ---
 
-## 🚀 Quick Start
+### Quick Start
 
 ### Prerequisites
 
 - Python 3.13+
 - Docker & Docker Compose
 - Git
+- Kubernetes cluster (optional for K8s deployment)
+- Jenkins (optional for CI/CD)
 
 ### Local Development
 
 ```bash
 # Clone the repository
 git clone https://github.com/2024ht66019/ACEest_Fitness.git
-cd ACEest_Fitness/flask_app
+cd ACEest_Fitness
 
 # Create virtual environment
 python3 -m venv venv
@@ -152,20 +162,17 @@ pip install -r requirements.txt
 # Run the application
 python run.py
 
-# Access the application
-# http://localhost:5000
+# Access the application at http://localhost:5000
 ```
 
 ### Docker Deployment
 
 ```bash
-cd flask_app
-
 # Build and run with Docker Compose
 docker-compose up -d
 
 # Access the application
-# http://localhost:80 (via Nginx)
+# http://localhost:80 (via LoadBalancer)
 # http://localhost:5000 (direct Flask)
 
 # View logs
@@ -182,7 +189,7 @@ docker-compose down
 pip install -r requirements-test.txt
 
 # Run all tests with coverage
-pytest -v --cov=app --cov-report=html
+pytest -v --cov=. --cov-report=html
 
 # View coverage report
 open htmlcov/index.html
@@ -192,47 +199,84 @@ open htmlcov/index.html
 
 ## 🔧 CI/CD Pipeline
 
-### Jenkins Multi-branch Pipeline
+### Jenkins Parameterized Pipeline
 
-The project includes two Jenkins pipeline configurations:
+The project uses a comprehensive Jenkins pipeline with **9 configurable parameters** supporting **5 deployment strategies**.
 
-1. **Jenkinsfile** - Traditional parameterized pipeline
-2. **Jenkinsfile.multibranch** - Automated multi-branch pipeline
+**Pipeline Features:**
+- ✅ Parameterized builds with branch-based auto-selection
+- ✅ Multi-stage deployment strategies
+- ✅ Automatic rollback on failure
+- ✅ Manual approval gates for production
+- ✅ Resource cleanup between strategy switches
 
 **Pipeline Stages:**
-1. ✅ Checkout & Setup
-2. ✅ Run Tests (Pytest with 70% coverage)
-3. ✅ SonarQube Analysis & Quality Gate
-4. ✅ Docker Build & Security Scan (Trivy)
-5. ✅ Push to Docker Hub
-6. ✅ Deploy to AKS (strategy-based)
-7. ✅ Health Checks & Smoke Tests
+1. ✅ Branch Information & Configuration
+2. ✅ Checkout & Python Environment Setup
+3. ✅ Run Tests (Pytest with 45% coverage minimum)
+4. ✅ SonarQube Analysis & Quality Gate
+5. ✅ Docker Build with Build Arguments
+6. ✅ Security Scan (Trivy vulnerability scanning)
+7. ✅ Push to Docker Hub (dharmalakshmi15/aceest-fitness-gym)
+8. ✅ Manual Approval (optional for production)
+9. ✅ Save Pre-Deployment State (for rollback)
+10. ✅ Strategy Cleanup (scale down other strategies)
+11. ✅ Deploy to Kubernetes (strategy-specific)
+12. ✅ Verify Deployment & Health Checks
+
+**Pipeline Parameters:**
+- `DEPLOYMENT_STRATEGY`: auto, blue-green, canary, rolling-update, shadow, ab-testing
+- `SKIP_TESTS`: Skip test execution (not recommended)
+- `SKIP_SONAR`: Skip SonarQube analysis
+- `SKIP_SECURITY_SCAN`: Skip Trivy security scan
+- `CANARY_TRAFFIC_STEPS`: Traffic distribution steps (e.g., 10,50,100)
+- `CANARY_WAIT_TIME`: Seconds between canary steps (default: 120s)
+- `AB_TRAFFIC_SPLIT`: A/B traffic split percentage (0-100)
+- `AUTO_ROLLBACK`: Automatic rollback on failure (default: true)
+- `MANUAL_APPROVAL`: Require approval before production deploy
 
 **Branch Strategy:**
-- `main` → Production (blue-green deployment)
-- `develop` → Staging (canary deployment)
-- `feature/*` → Dev (rolling update, manual)
-- `hotfix/*` → Production (rolling update, manual)
+- `main` → Production (auto: blue-green)
+- `develop` → Staging (auto: canary)
+- `feature/*` → Dev (auto: rolling-update)
+- `hotfix/*` → Production (rolling-update, manual approval)
+- `release/*` → Staging (canary)
+- Pull Requests → Test only (no deployment)
 
-**Setup Guide:** [GITHUB-JENKINS-WEBHOOK.md](GITHUB-JENKINS-WEBHOOK.md)
+**Documentation:**
+- 📖 [DEPLOYMENT-STRATEGIES.md](docs/DEPLOYMENT-STRATEGIES.md) - Complete strategy guide
+- 📖 [JENKINS-PARAMETERS.md](docs/JENKINS-PARAMETERS.md) - Parameter reference
+- 📖 [DEPLOYMENT-IMPLEMENTATION.md](docs/DEPLOYMENT-IMPLEMENTATION.md) - Implementation details
+- 📖 [DEPLOYMENT-DIAGRAM.md](docs/DEPLOYMENT-DIAGRAM.md) - Visual diagrams
+- 📖 [JENKINS-PIPELINE.md](docs/JENKINS-PIPELINE.md) - Jenkins setup guide
+- 📖 [GITHUB-JENKINS-WEBHOOK.md](docs/GITHUB-JENKINS-WEBHOOK.md) - GitHub webhook setup
 
 ---
 
 ## ☸️ Kubernetes Deployment
 
-### Deploy to AKS
+### Deploy to Kubernetes
 
 ```bash
 cd kube_manifests
 
-# Configure kubectl for AKS
-az aks get-credentials --resource-group <rg> --name <cluster>
+# Configure kubectl for your cluster
+kubectl config use-context <your-cluster>
+
+# Create namespace
+kubectl apply -f 00-namespace.yaml
+
+# Deploy infrastructure
+kubectl apply -f 01-configmap.yaml
+kubectl apply -f 02-secrets.yaml
+kubectl apply -f 03-postgres-statefulset.yaml
+kubectl apply -f 04-hpa.yaml
+kubectl apply -f 05-resource-quotas.yaml
+kubectl apply -f 06-network-policies.yaml
+kubectl apply -f 07-ingress.yaml
 
 # Deploy with a specific strategy
-./deploy.sh rolling-update deploy
-
-# Or deploy all infrastructure
-./deploy.sh all deploy
+kubectl apply -f strategies/rolling-update/
 
 # Check deployment status
 kubectl get all -n aceest-fitness
@@ -243,15 +287,31 @@ kubectl get service aceest-web-service -n aceest-fitness
 
 ### Available Deployment Strategies
 
-| Strategy | Use Case | Traffic Split | Rollback |
-|----------|----------|---------------|----------|
-| **Rolling Update** | Standard deployments | Gradual | `kubectl rollout undo` |
-| **Blue-Green** | Zero-downtime releases | Instant switch | Service selector change |
-| **Canary** | Gradual rollout | 10% canary / 90% stable | Scale canary to 0 |
-| **A/B Testing** | Feature testing | Header-based routing | Scale version B to 0 |
-| **Shadow** | Production testing | Mirror traffic | Remove shadow deployment |
+All strategies work with **native Kubernetes** (no Istio required):
 
-**Detailed Guide:** [kube_manifests/README.md](kube_manifests/README.md)
+| Strategy | Implementation | Traffic Control | Rollback Method |
+|----------|----------------|-----------------|-----------------|
+| **Rolling Update** | Native K8s RollingUpdate | Gradual pod replacement | `kubectl rollout undo` |
+| **Blue-Green** | Dual deployments + service selector | Instant switch | Change service selector |
+| **Canary** | Replica-based scaling | Approximate % via pod count | Scale canary to 0 |
+| **A/B Testing** | Dual deployments + replica scaling | Approximate % via pod count | Scale variant B to 0 |
+| **Shadow** | Parallel deployment | No traffic (manual testing) | Delete shadow deployment |
+
+**Key Features:**
+- ✅ No service mesh dependency (Istio optional)
+- ✅ Replica-based traffic distribution
+- ✅ Automatic cleanup between strategy switches
+- ✅ Resource-optimized for 2-node clusters
+- ✅ PostgreSQL StatefulSet for data persistence
+
+**Resource Specifications (per 2-node cluster):**
+- Total Capacity: 4 CPU cores, 8GB RAM
+- Per Pod: 250m CPU request, 256Mi memory request
+- Strategy Usage: 750m-1250m CPU, 768Mi-1280Mi memory
+
+**Documentation:**
+- 📖 [CLUSTER-RESOURCES.md](docs/CLUSTER-RESOURCES.md) - Resource optimization guide
+- 📖 [DEPLOYMENT-STRATEGIES.md](docs/DEPLOYMENT-STRATEGIES.md) - Strategy details
 
 ---
 
@@ -292,7 +352,7 @@ az aks get-credentials \
 ### Test Coverage
 
 - **35+ automated tests** across 5 test files
-- **70% minimum code coverage** enforced
+- **45% minimum code coverage** enforced in CI/CD
 - Unit tests, integration tests, and API tests
 
 ```bash
@@ -303,15 +363,21 @@ pytest tests/test_auth.py -v
 pytest -m unit -v
 
 # Generate coverage report
-pytest --cov=app --cov-report=html --cov-report=term
+pytest --cov=. --cov-report=html --cov-report=term-missing
 ```
 
 ### Test Categories
 
-- ✅ **Authentication** (10 tests) - Registration, login, validation
+- ✅ **Authentication** (10 tests) - Registration, login, password hashing
 - ✅ **Workouts** (10 tests) - CRUD operations, access control
 - ✅ **API Endpoints** (7 tests) - Health checks, page loads
 - ✅ **Models** (8 tests) - User/Workout models, relationships
+
+**CI/CD Integration:**
+- Automated test execution in Jenkins pipeline
+- Coverage reports published to Jenkins
+- Quality gate: minimum 45% coverage
+- Test results archived as JUnit XML
 
 ---
 
@@ -329,11 +395,12 @@ sonar-scanner \
 ```
 
 **Quality Gate Criteria:**
-- Code Coverage ≥ 70%
+- Code Coverage ≥ 45%
 - Bugs: 0
 - Vulnerabilities: 0
 - Code Smells < 50
 - Duplications < 3%
+- Security Hotspots: Reviewed
 
 ---
 
@@ -357,38 +424,57 @@ sonar-scanner \
 
 | Document | Description |
 |----------|-------------|
-| [QUICKSTART.md](flask_app/QUICKSTART.md) | Quick start guide for Flask app |
-| [DOCKER.md](flask_app/DOCKER.md) | Docker setup and deployment |
-| [README.md](kube_manifests/README.md) | Kubernetes deployment guide |
-| [AKS-GUIDE.md](kube_manifests/AKS-GUIDE.md) | Azure AKS specific configuration |
-| [JENKINS-PIPELINE.md](JENKINS-PIPELINE.md) | Complete Jenkins CI/CD guide |
-| [GITHUB-JENKINS-WEBHOOK.md](GITHUB-JENKINS-WEBHOOK.md) | GitHub webhook setup |
+| [DEPLOYMENT-STRATEGIES.md](docs/DEPLOYMENT-STRATEGIES.md) | Complete guide to all 5 deployment strategies |
+| [JENKINS-PARAMETERS.md](docs/JENKINS-PARAMETERS.md) | Pipeline parameters reference and examples |
+| [DEPLOYMENT-IMPLEMENTATION.md](docs/DEPLOYMENT-IMPLEMENTATION.md) | Implementation details and usage guide |
+| [DEPLOYMENT-DIAGRAM.md](docs/DEPLOYMENT-DIAGRAM.md) | Visual diagrams for each strategy |
+| [CLUSTER-RESOURCES.md](docs/CLUSTER-RESOURCES.md) | Resource optimization for 2-node clusters |
+| [JENKINS-PIPELINE.md](docs/JENKINS-PIPELINE.md) | Complete Jenkins CI/CD setup guide |
+| [JENKINS-QUICKSTART.md](docs/JENKINS-QUICKSTART.md) | Quick start guide for Jenkins |
+| [GITHUB-JENKINS-WEBHOOK.md](docs/GITHUB-JENKINS-WEBHOOK.md) | GitHub webhook integration setup |
+| [PIPELINE_DEBUG_SUMMARY.md](docs/PIPELINE_DEBUG_SUMMARY.md) | Pipeline debugging and troubleshooting |
 
 ---
 
 ## 🔄 Deployment Workflow
 
 ```
-Developer → Git Push
+Developer → Git Push (develop branch)
     ↓
-GitHub Webhook → Jenkins
+GitHub Webhook → Jenkins Trigger
     ↓
 Jenkins Pipeline:
-    ├─ Checkout Code
-    ├─ Run Tests (Pytest)
-    ├─ SonarQube Analysis
-    ├─ Quality Gate Check
-    ├─ Build Docker Image
-    ├─ Security Scan (Trivy)
-    ├─ Push to Docker Hub
-    └─ Deploy to AKS
-        ├─ Update Manifests
-        ├─ Apply Deployment
+    ├─ 1. Branch Information & Configuration
+    ├─ 2. Checkout Code
+    ├─ 3. Setup Python Environment (venv)
+    ├─ 4. Run Tests (Pytest with coverage)
+    ├─ 5. SonarQube Analysis
+    ├─ 6. Quality Gate Check
+    ├─ 7. Build Docker Image
+    ├─ 8. Security Scan (Trivy)
+    ├─ 9. Push to Docker Hub
+    ├─ 10. Manual Approval (if enabled)
+    ├─ 11. Save Pre-Deployment State
+    ├─ 12. Cleanup Other Strategies
+    └─ 13. Deploy to Kubernetes
+        ├─ Strategy Selection (auto → canary for develop)
+        ├─ Apply Manifests
+        ├─ Verify Deployment
         ├─ Health Checks
-        └─ Smoke Tests
+        └─ Rollback (if failure + auto-rollback enabled)
     ↓
-Application Live on AKS
+Application Live on Kubernetes
+    ├─ Canary: Gradual traffic shift (10% → 50% → 100%)
+    ├─ Monitoring at each step
+    └─ Automatic rollback on health check failure
 ```
+
+**Key Features:**
+- 🔄 Automatic strategy selection based on branch
+- 🧹 Cleanup of previous strategy resources
+- 🔙 Automatic rollback on deployment failure
+- 🚦 Manual approval gates for production
+- 📊 Comprehensive health checks and verification
 
 ---
 
@@ -396,15 +482,21 @@ Application Live on AKS
 
 ### DevOps Best Practices
 
-✅ **Containerization** - Docker multi-stage builds, optimized images  
-✅ **Orchestration** - Kubernetes with 5 deployment strategies  
-✅ **CI/CD** - Jenkins multi-branch pipeline with automated testing  
-✅ **IaC** - Terraform for Azure infrastructure  
-✅ **Testing** - 35+ automated tests with 70% coverage  
+✅ **Containerization** - Docker multi-stage builds, optimized images (Python 3.13-slim)  
+✅ **Orchestration** - Kubernetes with 5 deployment strategies (native K8s, no Istio required)  
+✅ **CI/CD** - Jenkins parameterized pipeline with 9 configurable parameters  
+✅ **Deployment Strategies** - Blue-Green, Canary, Rolling Update, A/B Testing, Shadow  
+✅ **Resource Management** - Optimized for 2-node clusters (2 CPU, 4GB RAM per node)  
+✅ **Auto-Cleanup** - Automatic scaling down of previous strategy resources  
+✅ **Rollback** - Automatic rollback on failure with pre-deployment state capture  
+✅ **IaC** - Terraform for Azure infrastructure provisioning  
+✅ **Testing** - 35+ automated tests with 45% minimum coverage  
 ✅ **Code Quality** - SonarQube integration with quality gates  
-✅ **Security** - Vulnerability scanning, secrets management  
-✅ **Monitoring** - Health checks, readiness/liveness probes  
-✅ **Documentation** - Comprehensive guides for all components  
+✅ **Security** - Trivy vulnerability scanning, secrets management, RBAC  
+✅ **Monitoring** - Health checks, readiness/liveness probes, HPA  
+✅ **Documentation** - 9 comprehensive markdown guides in docs/ folder  
+✅ **Database** - PostgreSQL StatefulSet with persistent volumes  
+✅ **Network Security** - Network policies, resource quotas, namespace isolation  
 
 ---
 
@@ -438,8 +530,9 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 For issues, questions, or contributions:
 - 📫 Open an issue on GitHub
-- 📖 Check documentation in `/docs`
-- 🔍 Review troubleshooting guides
+- 📖 Check documentation in [/docs](docs/)
+- 🔍 Review troubleshooting in [PIPELINE_DEBUG_SUMMARY.md](docs/PIPELINE_DEBUG_SUMMARY.md)
+- 📚 Read deployment guides in [DEPLOYMENT-STRATEGIES.md](docs/DEPLOYMENT-STRATEGIES.md)
 
 ---
 

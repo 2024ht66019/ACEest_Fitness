@@ -9,7 +9,7 @@ metadata:
     strategy: shadow
     last_build: "TIMESTAMP_PLACEHOLDER"
 spec:
-  replicas: 3
+  replicas: 2
   selector:
     matchLabels:
       app: aceest-web
@@ -40,6 +40,8 @@ spec:
         env:
         - name: DEPLOYMENT_VERSION
           value: "production"
+        - name: DEPLOYMENT_STRATEGY
+          value: "shadow"
         - name: SHADOW_MODE
           value: "false"
         resources:
@@ -51,16 +53,20 @@ spec:
             cpu: "500m"
         livenessProbe:
           httpGet:
-            path: /
+            path: /health
             port: 5000
           initialDelaySeconds: 45
           periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
         readinessProbe:
           httpGet:
-            path: /
+            path: /health
             port: 5000
           initialDelaySeconds: 15
           periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -73,7 +79,7 @@ metadata:
     strategy: shadow
     last_build: "TIMESTAMP_PLACEHOLDER"
 spec:
-  replicas: 3
+  replicas: 2
   selector:
     matchLabels:
       app: aceest-web
@@ -107,6 +113,8 @@ spec:
         env:
         - name: DEPLOYMENT_VERSION
           value: "shadow"
+        - name: DEPLOYMENT_STRATEGY
+          value: "shadow"
         - name: SHADOW_MODE
           value: "true"
         - name: LOG_LEVEL
@@ -120,16 +128,56 @@ spec:
             cpu: "500m"
         livenessProbe:
           httpGet:
-            path: /
+            path: /health
             port: 5000
           initialDelaySeconds: 45
           periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
         readinessProbe:
           httpGet:
-            path: /
+            path: /health
             port: 5000
           initialDelaySeconds: 15
           periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: aceest-web-production
+  namespace: aceest-fitness
+  labels:
+    app: aceest-web
+    version: production
+spec:
+  type: ClusterIP
+  ports:
+  - port: 5000
+    targetPort: 5000
+    name: http
+  selector:
+    app: aceest-web
+    version: production
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: aceest-web-shadow
+  namespace: aceest-fitness
+  labels:
+    app: aceest-web
+    version: shadow
+spec:
+  type: ClusterIP
+  ports:
+  - port: 5000
+    targetPort: 5000
+    name: http
+  selector:
+    app: aceest-web
+    version: shadow
 ---
 apiVersion: v1
 kind: Service
@@ -148,21 +196,7 @@ spec:
     name: http
   selector:
     app: aceest-web
-    version: production  # Only production receives real traffic
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: aceest-web-shadow
-  namespace: aceest-fitness
-spec:
-  type: ClusterIP
-  ports:
-  - port: 80
-    targetPort: 5000
-  selector:
-    app: aceest-web
-    version: shadow
+    version: production  # Only production receives real user traffic
 ---
 # Istio VirtualService for traffic mirroring (requires Istio service mesh)
 apiVersion: networking.istio.io/v1beta1

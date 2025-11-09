@@ -10,7 +10,7 @@ metadata:
   annotations:
     kubernetes.io/change-cause: "Rolling update deployment"
 spec:
-  replicas: 3
+  replicas: 2
   strategy:
     type: RollingUpdate
     rollingUpdate:
@@ -50,6 +50,9 @@ spec:
             name: aceest-config
         - secretRef:
             name: aceest-secrets
+        env:
+        - name: DEPLOYMENT_STRATEGY
+          value: "rolling-update"
         resources:
           requests:
             memory: "256Mi"
@@ -59,7 +62,7 @@ spec:
             cpu: "500m"
         livenessProbe:
           httpGet:
-            path: /
+            path: /health
             port: 5000
           initialDelaySeconds: 45
           periodSeconds: 10
@@ -67,7 +70,7 @@ spec:
           failureThreshold: 3
         readinessProbe:
           httpGet:
-            path: /
+            path: /health
             port: 5000
           initialDelaySeconds: 15
           periodSeconds: 5

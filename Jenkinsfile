@@ -29,6 +29,60 @@
 pipeline {
     agent any
     
+    parameters {
+        choice(
+            name: 'DEPLOYMENT_STRATEGY',
+            choices: ['auto', 'blue-green', 'canary', 'rolling-update', 'shadow', 'ab-testing'],
+            description: '''Deployment Strategy:
+            • auto: Branch-based selection (main→blue-green, develop→canary, feature→rolling)
+            • blue-green: Zero-downtime deployment with instant rollback
+            • canary: Gradual traffic shift (10% → 50% → 100%)
+            • rolling-update: Sequential pod replacement
+            • shadow: Deploy alongside production for testing (no traffic)
+            • ab-testing: Split traffic for A/B comparison'''
+        )
+        booleanParam(
+            name: 'SKIP_TESTS',
+            defaultValue: false,
+            description: 'Skip test execution (not recommended for production)'
+        )
+        booleanParam(
+            name: 'SKIP_SONAR',
+            defaultValue: false,
+            description: 'Skip SonarQube analysis'
+        )
+        booleanParam(
+            name: 'SKIP_SECURITY_SCAN',
+            defaultValue: false,
+            description: 'Skip Trivy security scan'
+        )
+        choice(
+            name: 'CANARY_TRAFFIC_STEPS',
+            choices: ['10,50,100', '20,40,60,80,100', '25,75,100', '10,30,50,70,100'],
+            description: 'Canary traffic distribution steps (percentages)'
+        )
+        string(
+            name: 'CANARY_WAIT_TIME',
+            defaultValue: '120',
+            description: 'Seconds to wait between canary traffic steps (for monitoring)'
+        )
+        string(
+            name: 'AB_TRAFFIC_SPLIT',
+            defaultValue: '50',
+            description: 'A/B Testing traffic split percentage for variant B (0-100)'
+        )
+        booleanParam(
+            name: 'AUTO_ROLLBACK',
+            defaultValue: true,
+            description: 'Automatically rollback on deployment failure'
+        )
+        booleanParam(
+            name: 'MANUAL_APPROVAL',
+            defaultValue: false,
+            description: 'Require manual approval before production deployment'
+        )
+    }
+    
     environment {
         // Docker configuration
         DOCKER_IMAGE = 'dharmalakshmi15/aceest-fitness-gym'
@@ -46,8 +100,8 @@ pipeline {
         // Branch-based environment selection
         DEPLOY_ENV = "${env.BRANCH_NAME == 'main' || env.BRANCH_NAME == 'master' ? 'production' : env.BRANCH_NAME == 'develop' ? 'staging' : env.BRANCH_NAME.startsWith('release/') ? 'staging' : 'dev'}"
         
-        // Branch-based deployment strategy
-        DEPLOYMENT_STRATEGY = "${env.BRANCH_NAME == 'main' || env.BRANCH_NAME == 'master' ? 'blue-green' : env.BRANCH_NAME == 'develop' ? 'canary' : env.BRANCH_NAME.startsWith('release/') ? 'canary' : env.BRANCH_NAME.startsWith('hotfix/') ? 'rolling-update' : 'rolling-update'}"
+        // Deployment strategy resolution
+        DEPLOYMENT_STRATEGY_RESOLVED = "${params.DEPLOYMENT_STRATEGY == 'auto' ? (env.BRANCH_NAME == 'main' || env.BRANCH_NAME == 'master' ? 'blue-green' : env.BRANCH_NAME == 'develop' ? 'canary' : env.BRANCH_NAME.startsWith('release/') ? 'canary' : 'rolling-update') : params.DEPLOYMENT_STRATEGY}"
         
         // Image tag strategy
         IMAGE_TAG = "${env.BRANCH_NAME == 'main' || env.BRANCH_NAME == 'master' ? 'latest' : env.BRANCH_NAME == 'develop' ? 'staging' : env.BRANCH_NAME.replaceAll('/', '-') + '-' + env.BUILD_NUMBER}"
@@ -64,6 +118,10 @@ pipeline {
         // Deployment control flags
         SHOULD_DEPLOY = "${(env.BRANCH_NAME == 'main' || env.BRANCH_NAME == 'master' || env.BRANCH_NAME == 'develop' || env.BRANCH_NAME.startsWith('release/')) ? 'true' : 'false'}"
         IS_PR = "${env.CHANGE_ID != null ? 'true' : 'false'}"
+        
+        // Rollback metadata
+        PREVIOUS_DEPLOYMENT = ''
+        ROLLBACK_AVAILABLE = 'false'
     }
     
     options {
@@ -90,11 +148,34 @@ pipeline {
                     
                     📦 Build Configuration:
                     ├─ Environment: ${DEPLOY_ENV}
-                    ├─ Strategy: ${DEPLOYMENT_STRATEGY}
+                    ├─ Strategy: ${DEPLOYMENT_STRATEGY_RESOLVED} ${params.DEPLOYMENT_STRATEGY == 'auto' ? '(auto-selected)' : '(manual)'}
                     ├─ Image Tag: ${IMAGE_TAG}
                     ├─ Build Number: ${BUILD_NUMBER}
                     └─ Deploy: ${SHOULD_DEPLOY == 'true' ? '✅ Auto' : '❌ Manual Only'}
+                    
+                    ⚙️  Pipeline Parameters:
+                    ├─ Skip Tests: ${params.SKIP_TESTS}
+                    ├─ Skip SonarQube: ${params.SKIP_SONAR}
+                    ├─ Skip Security Scan: ${params.SKIP_SECURITY_SCAN}
+                    ├─ Manual Approval: ${params.MANUAL_APPROVAL}
+                    └─ Auto Rollback: ${params.AUTO_ROLLBACK}
                     """
+                    
+                    if (DEPLOYMENT_STRATEGY_RESOLVED == 'canary') {
+                        echo """
+                    🕯️  Canary Configuration:
+                    ├─ Traffic Steps: ${params.CANARY_TRAFFIC_STEPS}%
+                    └─ Wait Time: ${params.CANARY_WAIT_TIME}s between steps
+                        """
+                    }
+                    
+                    if (DEPLOYMENT_STRATEGY_RESOLVED == 'ab-testing') {
+                        echo """
+                    🔬 A/B Testing Configuration:
+                    ├─ Variant A (current): ${100 - params.AB_TRAFFIC_SPLIT.toInteger()}%
+                    └─ Variant B (new): ${params.AB_TRAFFIC_SPLIT}%
+                        """
+                    }
                     
                     if (env.CHANGE_ID) {
                         echo """
@@ -174,6 +255,9 @@ pipeline {
         }
         
         stage('Run Tests') {
+            when {
+                expression { !params.SKIP_TESTS }
+            }
             steps {
                 script {
                     echo "🧪 Running automated tests with Pytest..."
@@ -225,7 +309,10 @@ pipeline {
         
         stage('SonarQube Analysis') {
             when {
-                not { changeRequest() }  // Skip for PRs if desired, or keep for all
+                allOf {
+                    not { changeRequest() }
+                    expression { !params.SKIP_SONAR }
+                }
             }
             steps {
                 script {
@@ -252,7 +339,10 @@ pipeline {
         
         stage('Quality Gate') {
             when {
-                not { changeRequest() }
+                allOf {
+                    not { changeRequest() }
+                    expression { !params.SKIP_SONAR }
+                }
             }
             steps {
                 script {
@@ -310,7 +400,10 @@ pipeline {
         
         stage('Security Scan') {
             when {
-                not { changeRequest() }
+                allOf {
+                    not { changeRequest() }
+                    expression { !params.SKIP_SECURITY_SCAN }
+                }
             }
             steps {
                 script {
@@ -368,6 +461,68 @@ pipeline {
             }
         }
         
+        stage('Manual Approval') {
+            when {
+                allOf {
+                    expression { params.MANUAL_APPROVAL }
+                    expression { env.SHOULD_DEPLOY == 'true' && env.IS_PR == 'false' }
+                    expression { env.DEPLOY_ENV == 'production' }
+                }
+            }
+            steps {
+                script {
+                    echo """
+                    ⏸️  Manual Approval Required
+                    ├─ Environment: ${DEPLOY_ENV}
+                    ├─ Strategy: ${DEPLOYMENT_STRATEGY_RESOLVED}
+                    ├─ Image: ${DOCKER_IMAGE}:${IMAGE_TAG}
+                    └─ Waiting for approval...
+                    """
+                    
+                    timeout(time: 30, unit: 'MINUTES') {
+                        input message: "Deploy to ${DEPLOY_ENV} using ${DEPLOYMENT_STRATEGY_RESOLVED}?",
+                              ok: 'Deploy',
+                              submitter: 'admin,deployer'
+                    }
+                    echo "✅ Deployment approved"
+                }
+            }
+        }
+        
+        stage('Save Pre-Deployment State') {
+            when {
+                expression { 
+                    env.SHOULD_DEPLOY == 'true' && env.IS_PR == 'false' && params.AUTO_ROLLBACK
+                }
+            }
+            steps {
+                script {
+                    echo "💾 Saving pre-deployment state for rollback..."
+                    withCredentials([file(credentialsId: "${KUBECONFIG_CREDENTIAL}", variable: 'KUBECONFIG')]) {
+                        def deploymentExists = sh(
+                            returnStatus: true,
+                            script: "kubectl get deployment aceest-web -n ${K8S_NAMESPACE} 2>/dev/null"
+                        )
+                        
+                        if (deploymentExists == 0) {
+                            env.PREVIOUS_DEPLOYMENT = sh(
+                                returnStdout: true,
+                                script: """
+                                    kubectl get deployment aceest-web -n ${K8S_NAMESPACE} \
+                                        -o jsonpath='{.spec.template.spec.containers[0].image}'
+                                """
+                            ).trim()
+                            env.ROLLBACK_AVAILABLE = 'true'
+                            echo "✅ Saved current deployment: ${env.PREVIOUS_DEPLOYMENT}"
+                        } else {
+                            echo "ℹ️  No previous deployment found (first deployment)"
+                            env.ROLLBACK_AVAILABLE = 'false'
+                        }
+                    }
+                }
+            }
+        }
+        
         stage('Deploy to AKS') {
             when {
                 expression { 
@@ -379,7 +534,7 @@ pipeline {
                     echo """
                     ☸️  Deploying to AKS cluster...
                     ├─ Environment: ${DEPLOY_ENV}
-                    ├─ Strategy: ${DEPLOYMENT_STRATEGY}
+                    ├─ Strategy: ${DEPLOYMENT_STRATEGY_RESOLVED}
                     ├─ Image: ${DOCKER_IMAGE}:${IMAGE_TAG}
                     └─ Namespace: ${K8S_NAMESPACE}
                     """
@@ -406,18 +561,28 @@ pipeline {
                             echo "⏳ Waiting for PostgreSQL..."
                             kubectl wait --for=condition=ready pod -l app=postgres \
                                 --namespace=${K8S_NAMESPACE} --timeout=300s || true
-                            
-                            echo "🚀 Deploying application (${DEPLOYMENT_STRATEGY})..."
-                            find strategies/${DEPLOYMENT_STRATEGY}/ -name "*.yaml" -exec \
-                                sed -i "s|image: dharmalakshmi15/aceest-fitness-gym:.*|image: ${DOCKER_IMAGE}:${IMAGE_TAG}|g" {} +
-                            
-                            echo "⏰ Injecting build timestamp into deployment labels..."
-                            find strategies/${DEPLOYMENT_STRATEGY}/ -name "*.yaml" -exec \
-                                sed -i "s|last_build: \"TIMESTAMP_PLACEHOLDER\"|last_build: \"${BUILD_TIMESTAMP}\"|g" {} +
-                            
-                            kubectl apply -f strategies/${DEPLOYMENT_STRATEGY}/
-                            echo "✅ Deployment initiated"
                         """
+                        
+                        // Strategy-specific deployment
+                        switch(DEPLOYMENT_STRATEGY_RESOLVED) {
+                            case 'blue-green':
+                                deployBlueGreen()
+                                break
+                            case 'canary':
+                                deployCanary()
+                                break
+                            case 'rolling-update':
+                                deployRollingUpdate()
+                                break
+                            case 'shadow':
+                                deployShadow()
+                                break
+                            case 'ab-testing':
+                                deployABTesting()
+                                break
+                            default:
+                                error "Unknown deployment strategy: ${DEPLOYMENT_STRATEGY_RESOLVED}"
+                        }
                     }
                 }
             }
@@ -499,6 +664,57 @@ pipeline {
             }
         }
         
+        failure {
+            script {
+                if (params.AUTO_ROLLBACK && env.ROLLBACK_AVAILABLE == 'true' && env.SHOULD_DEPLOY == 'true') {
+                    echo """
+                    ⚠️  DEPLOYMENT FAILED - INITIATING ROLLBACK
+                    ├─ Previous Image: ${env.PREVIOUS_DEPLOYMENT}
+                    └─ Strategy: ${DEPLOYMENT_STRATEGY_RESOLVED}
+                    """
+                    
+                    withCredentials([file(credentialsId: "${KUBECONFIG_CREDENTIAL}", variable: 'KUBECONFIG')]) {
+                        try {
+                            sh """
+                                kubectl set image deployment/aceest-web \
+                                    aceest-web=${env.PREVIOUS_DEPLOYMENT} \
+                                    -n ${K8S_NAMESPACE}
+                                
+                                kubectl rollout status deployment/aceest-web \
+                                    -n ${K8S_NAMESPACE} --timeout=300s
+                            """
+                            echo "✅ Rollback completed successfully"
+                        } catch (Exception e) {
+                            echo "❌ Rollback failed: ${e.message}"
+                            echo "⚠️  Manual intervention required!"
+                        }
+                    }
+                }
+                
+                def duration = currentBuild.durationString.replace(' and counting', '')
+                echo """
+                ╔═══════════════════════════════════════════════════════════╗
+                ║                   ❌ BUILD FAILED                        ║
+                ╚═══════════════════════════════════════════════════════════╝
+                
+                📋 Build Details:
+                ├─ Job: ${env.JOB_NAME}
+                ├─ Build: #${env.BUILD_NUMBER}
+                ├─ Duration: ${duration}
+                ├─ Branch: ${env.BRANCH_NAME}
+                └─ Commit: ${env.GIT_COMMIT_SHORT}
+                
+                🔍 Debug:
+                ├─ Console: ${env.BUILD_URL}console
+                └─ Logs: Check stage-specific logs above
+                """
+                
+                if (env.SHOULD_DEPLOY == 'true' && env.IS_PR == 'false') {
+                    echo "⚠️  Deployment may need rollback"
+                }
+            }
+        }
+        
         success {
             script {
                 def duration = currentBuild.durationString.replace(' and counting', '')
@@ -520,7 +736,7 @@ pipeline {
                 📦 Artifacts:
                 ├─ Image: ${DOCKER_IMAGE}:${IMAGE_TAG}
                 ├─ Environment: ${DEPLOY_ENV}
-                └─ Strategy: ${DEPLOYMENT_STRATEGY}
+                └─ Strategy: ${DEPLOYMENT_STRATEGY_RESOLVED}
                 
                 🔗 Links:
                 ├─ Build: ${env.BUILD_URL}
@@ -555,4 +771,308 @@ pipeline {
             }
         }
     }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// DEPLOYMENT STRATEGY FUNCTIONS
+// ═══════════════════════════════════════════════════════════════════════
+
+/**
+ * Blue-Green Deployment Strategy
+ * - Deploy new version to "green" environment
+ * - Test green environment
+ * - Switch traffic from blue to green
+ * - Keep blue for instant rollback
+ */
+def deployBlueGreen() {
+    echo "🔵🟢 Executing Blue-Green Deployment..."
+    
+    sh """
+        cd kube_manifests
+        
+        # Determine current active color
+        CURRENT_COLOR=\$(kubectl get service aceest-web-service -n ${K8S_NAMESPACE} \
+            -o jsonpath='{.spec.selector.color}' 2>/dev/null || echo 'blue')
+        
+        if [ "\$CURRENT_COLOR" = "blue" ]; then
+            NEW_COLOR="green"
+        else
+            NEW_COLOR="blue"
+        fi
+        
+        echo "📊 Current: \$CURRENT_COLOR → New: \$NEW_COLOR"
+        
+        # Deploy to new color
+        echo "🚀 Deploying \$NEW_COLOR environment..."
+        find strategies/blue-green/ -name "*.yaml" -exec \
+            sed -i "s|image: dharmalakshmi15/aceest-fitness-gym:.*|image: ${DOCKER_IMAGE}:${IMAGE_TAG}|g" {} +
+        
+        find strategies/blue-green/ -name "*.yaml" -exec \
+            sed -i "s|color: blue|color: \$NEW_COLOR|g" {} +
+        
+        kubectl apply -f strategies/blue-green/
+        
+        # Wait for new deployment
+        echo "⏳ Waiting for \$NEW_COLOR deployment..."
+        kubectl wait --for=condition=available deployment/aceest-web-\$NEW_COLOR \
+            -n ${K8S_NAMESPACE} --timeout=300s
+        
+        # Run health check on new deployment
+        echo "🏥 Health checking \$NEW_COLOR..."
+        sleep 10
+        
+        POD=\$(kubectl get pod -n ${K8S_NAMESPACE} -l color=\$NEW_COLOR -o jsonpath='{.items[0].metadata.name}')
+        kubectl exec \$POD -n ${K8S_NAMESPACE} -- curl -f http://localhost:5000/health || {
+            echo "❌ Health check failed on \$NEW_COLOR"
+            exit 1
+        }
+        
+        # Switch service to new color
+        echo "🔄 Switching traffic to \$NEW_COLOR..."
+        kubectl patch service aceest-web-service -n ${K8S_NAMESPACE} \
+            -p '{"spec":{"selector":{"color":"'\$NEW_COLOR'"}}}'
+        
+        echo "✅ Blue-Green deployment complete!"
+        echo "ℹ️  Old \$CURRENT_COLOR deployment kept for rollback"
+    """
+}
+
+/**
+ * Canary Deployment Strategy
+ * - Deploy canary version alongside production
+ * - Gradually shift traffic (10% → 50% → 100%)
+ * - Monitor metrics at each step
+ * - Rollback if issues detected
+ */
+def deployCanary() {
+    echo "🕯️  Executing Canary Deployment..."
+    
+    def trafficSteps = params.CANARY_TRAFFIC_STEPS.split(',').collect { it.toInteger() }
+    def waitTime = params.CANARY_WAIT_TIME.toInteger()
+    
+    sh """
+        cd kube_manifests
+        
+        echo "🚀 Deploying canary version..."
+        find strategies/canary/ -name "*.yaml" -exec \
+            sed -i "s|image: dharmalakshmi15/aceest-fitness-gym:.*|image: ${DOCKER_IMAGE}:${IMAGE_TAG}|g" {} +
+        
+        kubectl apply -f strategies/canary/
+        
+        echo "⏳ Waiting for canary deployment..."
+        kubectl wait --for=condition=available deployment/aceest-web-canary \
+            -n ${K8S_NAMESPACE} --timeout=300s
+    """
+    
+    // Gradually shift traffic
+    trafficSteps.each { percent ->
+        echo "📊 Shifting ${percent}% traffic to canary..."
+        
+        sh """
+            kubectl patch virtualservice aceest-web-vs -n ${K8S_NAMESPACE} --type merge -p '
+            {
+              "spec": {
+                "http": [{
+                  "route": [
+                    {
+                      "destination": {
+                        "host": "aceest-web-stable",
+                        "port": {"number": 5000}
+                      },
+                      "weight": ${ 100 - percent }
+                    },
+                    {
+                      "destination": {
+                        "host": "aceest-web-canary",
+                        "port": {"number": 5000}
+                      },
+                      "weight": ${percent}
+                    }
+                  ]
+                }]
+              }
+            }'
+            
+            echo "✅ Traffic shifted: ${percent}% to canary"
+        """
+        
+        if (percent < 100) {
+            echo "⏸️  Monitoring for ${waitTime}s before next step..."
+            sleep waitTime
+            
+            // Check metrics/health
+            def healthOk = sh(
+                returnStatus: true,
+                script: """
+                    kubectl exec deployment/aceest-web-canary -n ${K8S_NAMESPACE} \
+                        -- curl -sf http://localhost:5000/health
+                """
+            )
+            
+            if (healthOk != 0) {
+                error "❌ Canary health check failed at ${percent}% traffic"
+            }
+        }
+    }
+    
+    echo """
+    ✅ Canary deployment complete!
+    ├─ 100% traffic now on canary
+    └─ Stable version can be removed after validation
+    """
+}
+
+/**
+ * Rolling Update Deployment Strategy
+ * - Update pods gradually with zero downtime
+ * - Default Kubernetes rolling update
+ * - Automatic rollback on failure
+ */
+def deployRollingUpdate() {
+    echo "🔄 Executing Rolling Update Deployment..."
+    
+    sh """
+        cd kube_manifests
+        
+        echo "🚀 Applying rolling update..."
+        find strategies/rolling-update/ -name "*.yaml" -exec \
+            sed -i "s|image: dharmalakshmi15/aceest-fitness-gym:.*|image: ${DOCKER_IMAGE}:${IMAGE_TAG}|g" {} +
+        
+        find strategies/rolling-update/ -name "*.yaml" -exec \
+            sed -i "s|last_build: \"TIMESTAMP_PLACEHOLDER\"|last_build: \"${BUILD_TIMESTAMP}\"|g" {} +
+        
+        kubectl apply -f strategies/rolling-update/
+        
+        echo "⏳ Monitoring rollout..."
+        kubectl rollout status deployment/aceest-web -n ${K8S_NAMESPACE} --timeout=300s
+        
+        echo "✅ Rolling update complete!"
+        kubectl get deployment aceest-web -n ${K8S_NAMESPACE}
+    """
+}
+
+/**
+ * Shadow Deployment Strategy
+ * - Deploy new version alongside production
+ * - Mirror production traffic to shadow (no user impact)
+ * - Monitor shadow behavior and performance
+ * - No traffic routing to shadow
+ */
+def deployShadow() {
+    echo "👤 Executing Shadow Deployment..."
+    
+    sh """
+        cd kube_manifests
+        
+        echo "🚀 Deploying shadow version..."
+        find strategies/shadow/ -name "*.yaml" -exec \
+            sed -i "s|image: dharmalakshmi15/aceest-fitness-gym:.*|image: ${DOCKER_IMAGE}:${IMAGE_TAG}|g" {} +
+        
+        kubectl apply -f strategies/shadow/
+        
+        echo "⏳ Waiting for shadow deployment..."
+        kubectl wait --for=condition=available deployment/aceest-web-shadow \
+            -n ${K8S_NAMESPACE} --timeout=300s
+        
+        echo "🔍 Configuring traffic mirroring..."
+        kubectl apply -f - <<EOF
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: aceest-web-mirror
+  namespace: ${K8S_NAMESPACE}
+spec:
+  hosts:
+  - aceest-web-service
+  http:
+  - route:
+    - destination:
+        host: aceest-web-production
+        port:
+          number: 5000
+      weight: 100
+    mirror:
+      host: aceest-web-shadow
+      port:
+        number: 5000
+    mirrorPercentage:
+      value: 100
+EOF
+        
+        echo """
+        ✅ Shadow deployment complete!
+        ├─ Production: 100% user traffic
+        ├─ Shadow: Receives mirrored traffic (no user impact)
+        └─ Monitor shadow logs and metrics for validation
+        """
+    """
+}
+
+/**
+ * A/B Testing Deployment Strategy
+ * - Deploy variant B alongside variant A
+ * - Split traffic based on parameter (e.g., 50/50)
+ * - Use headers/cookies for consistent routing
+ * - Compare metrics between variants
+ */
+def deployABTesting() {
+    echo "🔬 Executing A/B Testing Deployment..."
+    
+    def trafficSplit = params.AB_TRAFFIC_SPLIT.toInteger()
+    def variantA = 100 - trafficSplit
+    
+    sh """
+        cd kube_manifests
+        
+        echo "🚀 Deploying A/B test variants..."
+        find strategies/ab-testing/ -name "*.yaml" -exec \
+            sed -i "s|image: dharmalakshmi15/aceest-fitness-gym:.*|image: ${DOCKER_IMAGE}:${IMAGE_TAG}|g" {} +
+        
+        kubectl apply -f strategies/ab-testing/
+        
+        echo "⏳ Waiting for variant B deployment..."
+        kubectl wait --for=condition=available deployment/aceest-web-variant-b \
+            -n ${K8S_NAMESPACE} --timeout=300s
+        
+        echo "🎯 Configuring traffic split: A=${variantA}% / B=${trafficSplit}%"
+        kubectl apply -f - <<EOF
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: aceest-web-ab-test
+  namespace: ${K8S_NAMESPACE}
+spec:
+  hosts:
+  - aceest-web-service
+  http:
+  - match:
+    - headers:
+        x-variant:
+          exact: "B"
+    route:
+    - destination:
+        host: aceest-web-variant-b
+        port:
+          number: 5000
+  - route:
+    - destination:
+        host: aceest-web-variant-a
+        port:
+          number: 5000
+      weight: ${variantA}
+    - destination:
+        host: aceest-web-variant-b
+        port:
+          number: 5000
+      weight: ${trafficSplit}
+EOF
+        
+        echo """
+        ✅ A/B Testing deployment complete!
+        ├─ Variant A (current): ${variantA}% traffic
+        ├─ Variant B (new): ${trafficSplit}% traffic
+        ├─ Header routing: x-variant: B → Variant B
+        └─ Monitor conversion metrics and user behavior
+        """
+    """
 }

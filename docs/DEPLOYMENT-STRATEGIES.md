@@ -57,26 +57,31 @@ kubectl patch service aceest-web-service -n aceest-fitness \
 
 **How it works:**
 - Deploy new version alongside current version
-- Gradually shift traffic: 10% → 50% → 100%
+- Gradually shift traffic using replica scaling: 10% → 50% → 100%
 - Monitor metrics at each step
 - Automatic rollback if health checks fail
 - Wait time between steps for monitoring
+
+**Implementation:** Uses native Kubernetes replica scaling (no Istio required)
+- Traffic distribution is approximate based on pod count
+- For precise percentage-based traffic control, install Istio service mesh
 
 **Advantages:**
 - ✅ Gradual risk exposure
 - ✅ Real-user testing with small subset
 - ✅ Monitor metrics before full rollout
 - ✅ Easy to abort if issues detected
+- ✅ No service mesh dependency
 
 **Disadvantages:**
 - ❌ Slower rollout process
 - ❌ Requires monitoring infrastructure
-- ❌ Session affinity can be complex
+- ❌ Traffic split is approximate (not exact percentages)
 
 **Pipeline Configuration:**
 ```groovy
 DEPLOYMENT_STRATEGY = 'canary'
-CANARY_TRAFFIC_STEPS = '10,50,100'      // Traffic percentages
+CANARY_TRAFFIC_STEPS = '10,50,100'      // Traffic percentages (approximate)
 CANARY_WAIT_TIME = '120'                 // Seconds between steps
 ```
 
@@ -156,26 +161,31 @@ kubectl rollout history deployment/aceest-web -n aceest-fitness
 
 ### 4. 👤 Shadow Deployment
 
-**Best for:** Testing new version with production traffic without user impact
+**Best for:** Testing new version in parallel for manual comparison (Simplified implementation)
 
 **How it works:**
 - Deploy new version alongside production
-- Mirror (duplicate) production traffic to shadow
-- Shadow processes requests but responses discarded
-- Compare shadow behavior with production
-- No impact on users
+- Shadow runs independently without receiving traffic
+- Access shadow via port-forward for manual testing
+- Compare behavior and performance manually
+- No user impact
+
+**Implementation:** Simplified (no traffic mirroring)
+- Shadow deployment runs separately for testing
+- Production receives all user traffic
+- For automatic traffic mirroring, install Istio service mesh
 
 **Advantages:**
 - ✅ Zero user impact
-- ✅ Test with real production traffic
-- ✅ Performance comparison
-- ✅ Great for load testing
+- ✅ No service mesh dependency
+- ✅ Simple to set up
+- ✅ Good for load testing and manual validation
 
 **Disadvantages:**
 - ❌ Requires 2x infrastructure
-- ❌ Requires Istio/service mesh
+- ❌ No automatic traffic mirroring (without Istio)
+- ❌ Manual testing required
 - ❌ Side effects (DB writes) need handling
-- ❌ Complex to set up
 
 **Pipeline Configuration:**
 ```groovy
@@ -183,13 +193,17 @@ DEPLOYMENT_STRATEGY = 'shadow'
 ```
 
 **Requirements:**
-- Istio service mesh installed
-- Traffic mirroring configured
+- None (native Kubernetes)
+- Optional: Istio for automatic traffic mirroring
 
 **Usage:**
 ```bash
 # Jenkins parameters:
 Deployment Strategy: shadow
+
+# Access shadow for testing:
+kubectl port-forward deployment/aceest-web-shadow 8080:5000 -n aceest-fitness
+# Then test at http://localhost:8080
 ```
 
 **Monitoring Shadow:**
@@ -210,27 +224,31 @@ kubectl top pods -n aceest-fitness -l version=shadow
 
 **How it works:**
 - Deploy variant A (current) and variant B (new)
-- Split traffic based on parameter (e.g., 50/50)
-- Use headers/cookies for consistent routing
+- Split traffic using replica counts (approximate distribution)
+- Both variants share the same service for load balancing
 - Measure KPIs and conversion metrics
 - Choose winner based on data
+
+**Implementation:** Uses native Kubernetes replica scaling
+- Traffic distribution is approximate based on pod count
+- For precise percentage control and header-based routing, install Istio
 
 **Advantages:**
 - ✅ Data-driven decisions
 - ✅ Measure business impact
 - ✅ Compare features side-by-side
-- ✅ Consistent user experience
+- ✅ No service mesh dependency
 
 **Disadvantages:**
 - ❌ Requires analytics infrastructure
 - ❌ Takes time to gather data
-- ❌ Complex routing logic
-- ❌ Need significant traffic
+- ❌ Traffic split is approximate (not exact)
+- ❌ Need significant traffic for meaningful results
 
 **Pipeline Configuration:**
 ```groovy
 DEPLOYMENT_STRATEGY = 'ab-testing'
-AB_TRAFFIC_SPLIT = '50'  // Percentage for variant B (0-100)
+AB_TRAFFIC_SPLIT = '50'  // Percentage for variant B (0-100, approximate)
 ```
 
 **Usage:**

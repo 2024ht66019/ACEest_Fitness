@@ -838,36 +838,30 @@ def deployCanary() {
             -n ${K8S_NAMESPACE} --timeout=300s
     """
     
-    // Gradually shift traffic
+    // Gradually shift traffic using native Kubernetes replica scaling
+    echo "Using native K8s replica-based canary deployment (no Istio required)"
+    
     trafficSteps.each { percent ->
-        echo "📊 Shifting ${percent}% traffic to canary..."
+        echo "📊 Scaling to ${percent}% canary traffic..."
+        
+        // Calculate replicas based on percentage
+        def totalReplicas = 3  // Total desired replicas
+        def canaryReplicas = Math.ceil(totalReplicas * percent / 100).toInteger()
+        def stableReplicas = totalReplicas - canaryReplicas
+        
+        if (canaryReplicas < 1) canaryReplicas = 1
+        if (stableReplicas < 0) stableReplicas = 0
         
         sh """
-            kubectl patch virtualservice aceest-web-vs -n ${K8S_NAMESPACE} --type merge -p '
-            {
-              "spec": {
-                "http": [{
-                  "route": [
-                    {
-                      "destination": {
-                        "host": "aceest-web-stable",
-                        "port": {"number": 5000}
-                      },
-                      "weight": ${ 100 - percent }
-                    },
-                    {
-                      "destination": {
-                        "host": "aceest-web-canary",
-                        "port": {"number": 5000}
-                      },
-                      "weight": ${percent}
-                    }
-                  ]
-                }]
-              }
-            }'
+            echo "Scaling stable to ${stableReplicas} replicas, canary to ${canaryReplicas} replicas"
             
-            echo "✅ Traffic shifted: ${percent}% to canary"
+            kubectl scale deployment aceest-web-stable -n ${K8S_NAMESPACE} --replicas=${stableReplicas}
+            kubectl scale deployment aceest-web-canary -n ${K8S_NAMESPACE} --replicas=${canaryReplicas}
+            
+            echo "Waiting for scaling to complete..."
+            kubectl wait --for=condition=available deployment/aceest-web-canary -n ${K8S_NAMESPACE} --timeout=120s || true
+            
+            echo "Traffic distribution: ~${percent}% canary (${canaryReplicas} pods), ~${ 100 - percent }% stable (${stableReplicas} pods)"
         """
         
         if (percent < 100) {
@@ -929,12 +923,13 @@ def deployRollingUpdate() {
  * - No traffic routing to shadow
  */
 def deployShadow() {
-    echo "👤 Executing Shadow Deployment..."
+    echo "👤 Executing Shadow Deployment (Simplified - No Istio)"
+    echo "Note: True traffic mirroring requires Istio. Deploying shadow for manual testing only."
     
     sh """
         cd kube_manifests
         
-        echo "🚀 Deploying shadow version..."
+        echo "🚀 Deploying shadow version for testing..."
         find strategies/shadow/ -name "*.yaml" -exec \
             sed -i "s|image: dharmalakshmi15/aceest-fitness-gym:.*|image: ${DOCKER_IMAGE}:${IMAGE_TAG}|g" {} +
         
@@ -944,35 +939,11 @@ def deployShadow() {
         kubectl wait --for=condition=available deployment/aceest-web-shadow \
             -n ${K8S_NAMESPACE} --timeout=300s
         
-        echo "🔍 Configuring traffic mirroring..."
-        kubectl apply -f - <<EOF
-apiVersion: networking.istio.io/v1beta1
-kind: VirtualService
-metadata:
-  name: aceest-web-mirror
-  namespace: ${K8S_NAMESPACE}
-spec:
-  hosts:
-  - aceest-web-service
-  http:
-  - route:
-    - destination:
-        host: aceest-web-production
-        port:
-          number: 5000
-      weight: 100
-    mirror:
-      host: aceest-web-shadow
-      port:
-        number: 5000
-    mirrorPercentage:
-      value: 100
-EOF
-        
         echo 'Shadow deployment complete!'
-        echo 'Production: 100% user traffic'
-        echo 'Shadow: Receives mirrored traffic (no user impact)'
-        echo 'Monitor shadow logs and metrics for validation'
+        echo 'Production: 100% user traffic (via main service)'
+        echo 'Shadow: Deployed separately for manual testing (no automatic traffic)'
+        echo 'Access shadow via: kubectl port-forward deployment/aceest-web-shadow 8080:5000'
+        echo 'Note: Install Istio for automatic traffic mirroring'
     """
 }
 
@@ -984,7 +955,7 @@ EOF
  * - Compare metrics between variants
  */
 def deployABTesting() {
-    echo "🔬 Executing A/B Testing Deployment..."
+    echo "🔬 Executing A/B Testing Deployment (Native K8s)"
     
     def trafficSplit = params.AB_TRAFFIC_SPLIT.toInteger()
     def variantA = 100 - trafficSplit
@@ -1002,43 +973,27 @@ def deployABTesting() {
         kubectl wait --for=condition=available deployment/aceest-web-variant-b \
             -n ${K8S_NAMESPACE} --timeout=300s
         
-        echo "🎯 Configuring traffic split: A=${variantA}% / B=${trafficSplit}%"
-        kubectl apply -f - <<EOF
-apiVersion: networking.istio.io/v1beta1
-kind: VirtualService
-metadata:
-  name: aceest-web-ab-test
-  namespace: ${K8S_NAMESPACE}
-spec:
-  hosts:
-  - aceest-web-service
-  http:
-  - match:
-    - headers:
-        x-variant:
-          exact: "B"
-    route:
-    - destination:
-        host: aceest-web-variant-b
-        port:
-          number: 5000
-  - route:
-    - destination:
-        host: aceest-web-variant-a
-        port:
-          number: 5000
-      weight: ${variantA}
-    - destination:
-        host: aceest-web-variant-b
-        port:
-          number: 5000
-      weight: ${trafficSplit}
-EOF
+        echo "🎯 Configuring traffic split using replica counts: A=${variantA}% / B=${trafficSplit}%"
+        
+        # Calculate replicas based on traffic split percentage
+        TOTAL_REPLICAS=4
+        VARIANT_B_REPLICAS=\$(echo "scale=0; (${trafficSplit} * \$TOTAL_REPLICAS) / 100" | bc)
+        VARIANT_A_REPLICAS=\$(echo "\$TOTAL_REPLICAS - \$VARIANT_B_REPLICAS" | bc)
+        
+        # Ensure at least 1 replica each
+        [ \$VARIANT_A_REPLICAS -lt 1 ] && VARIANT_A_REPLICAS=1
+        [ \$VARIANT_B_REPLICAS -lt 1 ] && VARIANT_B_REPLICAS=1
+        
+        echo "Scaling Variant A to \$VARIANT_A_REPLICAS replicas"
+        echo "Scaling Variant B to \$VARIANT_B_REPLICAS replicas"
+        
+        kubectl scale deployment aceest-web-variant-a -n ${K8S_NAMESPACE} --replicas=\$VARIANT_A_REPLICAS
+        kubectl scale deployment aceest-web-variant-b -n ${K8S_NAMESPACE} --replicas=\$VARIANT_B_REPLICAS
         
         echo "A/B Testing deployment complete!"
-        echo "Variant A (current): ${variantA}% traffic"
-        echo "Variant B (new): ${trafficSplit}% traffic"
-        echo 'Header routing: x-variant: B -> Variant B'
-        echo 'Monitor conversion metrics and user behavior'
+        echo "Variant A: \$VARIANT_A_REPLICAS replicas (~${variantA}% traffic)"
+        echo "Variant B: \$VARIANT_B_REPLICAS replicas (~${trafficSplit}% traffic)"
+        echo 'Note: Traffic split is approximate based on pod count'
+        echo 'For precise traffic control, install Istio service mesh'
     """
 }

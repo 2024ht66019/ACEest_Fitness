@@ -1,7 +1,7 @@
 """
 ACEest Fitness & Gym Management System
 Main application entry point
-Version: 1.0.0
+Version: 1.2.3
 """
 
 from flask import Flask
@@ -32,12 +32,10 @@ def create_app(config_class=Config):
     from routes.auth import auth_bp
     from routes.main import main_bp
     from routes.workouts import workouts_bp
-    from routes.analytics import analytics_bp
 
     app.register_blueprint(auth_bp, url_prefix='/auth')
     app.register_blueprint(main_bp)
     app.register_blueprint(workouts_bp, url_prefix='/workouts')
-    app.register_blueprint(analytics_bp, url_prefix='/analytics')
 
     # Create database tables
     with app.app_context():

@@ -65,49 +65,6 @@ class User(UserMixin, db.Model):
         return None
     
     @property
-    def bmi_category(self):
-        """
-        Determine BMI category with enhanced classification
-        Updated to include more detailed categories
-        """
-        if not self.bmi:
-            return "Unknown"
-        
-        # Enhanced BMI categories
-        if self.bmi < 16:
-            return "Severely Underweight"
-        elif 16 <= self.bmi < 18.5:
-            return "Underweight"
-        elif 18.5 <= self.bmi < 25:
-            return "Normal weight"
-        elif 25 <= self.bmi < 30:
-            return "Overweight"
-        elif 30 <= self.bmi < 35:
-            return "Obese Class I"
-        elif 35 <= self.bmi < 40:
-            return "Obese Class II"
-        else:
-            return "Obese Class III"
-    
-    @property
-    def health_recommendation(self):
-        """Provide health recommendation based on BMI category"""
-        if not self.bmi:
-            return "Please update your profile with height and weight information."
-        
-        recommendations = {
-            "Severely Underweight": "Consult a healthcare provider immediately for nutritional guidance.",
-            "Underweight": "Consider increasing calorie intake and strength training.",
-            "Normal weight": "Maintain current weight with balanced diet and regular exercise.",
-            "Overweight": "Focus on cardio exercises and calorie deficit diet.",
-            "Obese Class I": "Consult a fitness trainer for personalized weight loss plan.",
-            "Obese Class II": "Medical supervision recommended for weight management.",
-            "Obese Class III": "Immediate medical consultation required for health assessment."
-        }
-        
-        return recommendations.get(self.bmi_category, "Consult a healthcare provider.")
-    
-    @property
     def bmr(self):
         """
         Calculate Basal Metabolic Rate (BMR) using Mifflin-St Jeor Equation
@@ -126,16 +83,6 @@ class User(UserMixin, db.Model):
         else:
             # For other genders, use average
             return round(base_bmr - 78, 0)
-    
-    @property
-    def tdee(self):
-        """
-        Calculate Total Daily Energy Expenditure (TDEE)
-        Using moderate activity level (exercise 3-5 days/week)
-        """
-        if not self.bmr:
-            return None
-        return round(self.bmr * 1.55, 0)
     
     def get_workout_stats(self):
         """Get user's workout statistics"""

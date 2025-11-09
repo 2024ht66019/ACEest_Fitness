@@ -7,8 +7,9 @@ metadata:
     app: aceest-web
     version: stable
     strategy: canary
+    last_build: "TIMESTAMP_PLACEHOLDER"
 spec:
-  replicas: 9
+  replicas: 2
   selector:
     matchLabels:
       app: aceest-web
@@ -39,8 +40,8 @@ spec:
         env:
         - name: DEPLOYMENT_VERSION
           value: "stable"
-        - name: TRAFFIC_PERCENTAGE
-          value: "90"
+        - name: DEPLOYMENT_STRATEGY
+          value: "canary"
         resources:
           requests:
             memory: "256Mi"
@@ -50,16 +51,20 @@ spec:
             cpu: "500m"
         livenessProbe:
           httpGet:
-            path: /
+            path: /health
             port: 5000
           initialDelaySeconds: 45
           periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
         readinessProbe:
           httpGet:
-            path: /
+            path: /health
             port: 5000
           initialDelaySeconds: 15
           periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -70,6 +75,7 @@ metadata:
     app: aceest-web
     version: canary
     strategy: canary
+    last_build: "TIMESTAMP_PLACEHOLDER"
 spec:
   replicas: 1
   selector:
@@ -85,6 +91,7 @@ spec:
       annotations:
         prometheus.io/scrape: "true"
         prometheus.io/port: "5000"
+        prometheus.io/path: "/metrics"
     spec:
       initContainers:
       - name: wait-for-db
@@ -105,8 +112,10 @@ spec:
         env:
         - name: DEPLOYMENT_VERSION
           value: "canary"
-        - name: TRAFFIC_PERCENTAGE
-          value: "10"
+        - name: DEPLOYMENT_STRATEGY
+          value: "canary"
+        - name: CANARY_ENABLED
+          value: "true"
         resources:
           requests:
             memory: "256Mi"
@@ -116,16 +125,56 @@ spec:
             cpu: "500m"
         livenessProbe:
           httpGet:
-            path: /
+            path: /health
             port: 5000
           initialDelaySeconds: 45
           periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
         readinessProbe:
           httpGet:
-            path: /
+            path: /health
             port: 5000
           initialDelaySeconds: 15
           periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: aceest-web-stable
+  namespace: aceest-fitness
+  labels:
+    app: aceest-web
+    version: stable
+spec:
+  type: ClusterIP
+  ports:
+  - port: 5000
+    targetPort: 5000
+    name: http
+  selector:
+    app: aceest-web
+    version: stable
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: aceest-web-canary
+  namespace: aceest-fitness
+  labels:
+    app: aceest-web
+    version: canary
+spec:
+  type: ClusterIP
+  ports:
+  - port: 5000
+    targetPort: 5000
+    name: http
+  selector:
+    app: aceest-web
+    version: canary
 ---
 apiVersion: v1
 kind: Service
@@ -143,4 +192,4 @@ spec:
     protocol: TCP
     name: http
   selector:
-    app: aceest-web  # Selects both stable and canary
+    app: aceest-web  # Selects both stable and canary (traffic split via replica scaling)

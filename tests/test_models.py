@@ -2,9 +2,9 @@
 Model tests for User and Workout models.
 """
 import pytest
-from app.models.user import User
-from app.models.workout import Workout
-from datetime import datetime, timedelta
+from models.user import User
+from models.workout import Workout
+from datetime import datetime, timedelta, timezone
 
 
 class TestUserModel:
@@ -40,8 +40,8 @@ class TestUserModel:
         """Test user-workout relationship."""
         with app.app_context():
             user = User.query.filter_by(username='testuser').first()
-            assert len(user.workouts) > 0
-            assert isinstance(user.workouts[0], Workout)
+            assert user.workouts.count() > 0
+            assert isinstance(user.workouts.first(), Workout)
 
 
 class TestWorkoutModel:
@@ -52,13 +52,15 @@ class TestWorkoutModel:
         with app.app_context():
             workout = Workout(
                 user_id=test_user.id,
-                workout_type='Testing',
+                category='Workout',
+                exercise_name='Testing',
                 duration=25,
                 calories_burned=250,
                 notes='Test workout'
             )
             
-            assert workout.workout_type == 'Testing'
+            assert workout.category == 'Workout'
+            assert workout.exercise_name == 'Testing'
             assert workout.duration == 25
             assert workout.calories_burned == 250
             assert workout.notes == 'Test workout'
@@ -66,14 +68,15 @@ class TestWorkoutModel:
     def test_workout_date_default(self, app, test_user):
         """Test workout date defaults to current time."""
         with app.app_context():
-            before = datetime.utcnow()
+            before = datetime.now(timezone.utc).date()
             workout = Workout(
                 user_id=test_user.id,
-                workout_type='Testing',
+                category='Workout',
+                exercise_name='Testing',
                 duration=20,
                 calories_burned=200
             )
-            after = datetime.utcnow()
+            after = datetime.now(timezone.utc).date()
             
             assert workout.workout_date is not None
             assert before <= workout.workout_date <= after
@@ -83,7 +86,8 @@ class TestWorkoutModel:
         with app.app_context():
             workout = Workout(
                 user_id=test_user.id,
-                workout_type='Running',
+                category='Workout',
+                exercise_name='Running',
                 duration=30,
                 calories_burned=300
             )
@@ -104,7 +108,8 @@ class TestWorkoutModel:
         with app.app_context():
             workout = Workout(
                 user_id=test_user.id,
-                workout_type='Cycling',
+                category='Workout',
+                exercise_name='Cycling',
                 duration=60,
                 calories_burned=500,
                 notes='Long ride'

@@ -22,7 +22,8 @@ def register():
         username = request.form.get('username', '').strip()
         email = request.form.get('email', '').strip()
         password = request.form.get('password', '')
-        confirm_password = request.form.get('confirm_password', '')
+        # Support both confirm_password and password2 field names for compatibility
+        confirm_password = request.form.get('confirm_password', '') or request.form.get('password2', '')
         
         # Validation
         if not all([username, email, password]):

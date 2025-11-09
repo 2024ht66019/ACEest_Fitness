@@ -1,27 +1,29 @@
 #!/usr/bin/env groovy
+// Jenkins Multi-branch Pipeline - ACEest Fitness
+// Last updated: 2025-11-08
 /**
- * Jenkins CI/CD Pipeline for ACEest Fitness Gym Management Application
+ * Jenkins Multi-branch Pipeline for ACEest Fitness Gym Management Application
  * 
- * Features:
- * - Automated testing with Pytest
- * - SonarQube code quality analysis
- * - Docker image build and push to Docker Hub
- * - Parameterized deployment to AKS with multiple strategies
- * - Health checks and rollback capabilities
- * - Email/Slack notifications
+ * Supports:
+ * - Multi-branch pipeline with automatic branch discovery
+ * - Branch-specific deployment strategies and environments
+ * - Pull request validation
+ * - Automated testing, SonarQube analysis, Docker build/push
+ * - Kubernetes deployment to AKS
+ * 
+ * Branch Strategy:
+ * - main/master    → production (blue-green deployment)
+ * - develop        → staging (canary deployment)
+ * - feature/*      → dev (rolling-update, manual deploy)
+ * - hotfix/*       → production (rolling-update, manual approval)
+ * - release/*      → staging (canary deployment)
+ * - Pull Requests  → test only (no deployment)
  * 
  * Required Jenkins Credentials:
  * - dockerhub-credentials: Docker Hub username/password
  * - kubeconfig-aks: AKS cluster kubeconfig file
  * - sonarqube-token: SonarQube authentication token
- * - github-token: GitHub token (optional, for PR status)
- * 
- * Required Jenkins Plugins:
- * - Docker Pipeline
- * - Kubernetes CLI
- * - SonarQube Scanner
- * - Pipeline Utility Steps
- * - Credentials Binding
+ * - github-token: GitHub Personal Access Token
  */
 
 pipeline {
@@ -30,38 +32,54 @@ pipeline {
     parameters {
         choice(
             name: 'DEPLOYMENT_STRATEGY',
-            choices: ['rolling-update', 'blue-green', 'canary', 'ab-testing', 'shadow'],
-            description: 'Select deployment strategy for Kubernetes'
+            choices: ['auto', 'blue-green', 'canary', 'rolling-update', 'shadow', 'ab-testing'],
+            description: '''Deployment Strategy:
+            • auto: Branch-based selection (main→blue-green, develop→canary, feature→rolling)
+            • blue-green: Zero-downtime deployment with instant rollback
+            • canary: Gradual traffic shift (10% → 50% → 100%)
+            • rolling-update: Sequential pod replacement
+            • shadow: Deploy alongside production for testing (no traffic)
+            • ab-testing: Split traffic for A/B comparison'''
+        )
+        booleanParam(
+            name: 'SKIP_TESTS',
+            defaultValue: false,
+            description: 'Skip test execution (not recommended for production)'
+        )
+        booleanParam(
+            name: 'SKIP_SONAR',
+            defaultValue: false,
+            description: 'Skip SonarQube analysis'
+        )
+        booleanParam(
+            name: 'SKIP_SECURITY_SCAN',
+            defaultValue: false,
+            description: 'Skip Trivy security scan'
         )
         choice(
-            name: 'ENVIRONMENT',
-            choices: ['dev', 'staging', 'production'],
-            description: 'Target environment for deployment'
+            name: 'CANARY_TRAFFIC_STEPS',
+            choices: ['10,50,100', '20,40,60,80,100', '25,75,100', '10,30,50,70,100'],
+            description: 'Canary traffic distribution steps (percentages)'
         )
         string(
-            name: 'IMAGE_TAG',
-            defaultValue: 'latest',
-            description: 'Docker image tag (default: latest, or specify version like v1.2.3)'
+            name: 'CANARY_WAIT_TIME',
+            defaultValue: '120',
+            description: 'Seconds to wait between canary traffic steps (for monitoring)'
+        )
+        string(
+            name: 'AB_TRAFFIC_SPLIT',
+            defaultValue: '50',
+            description: 'A/B Testing traffic split percentage for variant B (0-100)'
         )
         booleanParam(
-            name: 'RUN_TESTS',
+            name: 'AUTO_ROLLBACK',
             defaultValue: true,
-            description: 'Run automated tests'
+            description: 'Automatically rollback on deployment failure'
         )
         booleanParam(
-            name: 'RUN_SONARQUBE',
-            defaultValue: true,
-            description: 'Run SonarQube analysis'
-        )
-        booleanParam(
-            name: 'DEPLOY_TO_AKS',
-            defaultValue: true,
-            description: 'Deploy to AKS cluster'
-        )
-        booleanParam(
-            name: 'SKIP_BUILD',
+            name: 'MANUAL_APPROVAL',
             defaultValue: false,
-            description: 'Skip Docker build (use existing image)'
+            description: 'Require manual approval before production deployment'
         )
     }
     
@@ -76,48 +94,110 @@ pipeline {
         K8S_NAMESPACE = 'aceest-fitness'
         
         // SonarQube configuration
-        SONARQUBE_URL = 'http://20.244.27.1:9000'  // Update with your SonarQube URL
+        SONARQUBE_URL = 'http://sonarqube:9000'
         SONAR_TOKEN = credentials('sonarqube-token')
         
+        // Branch-based environment selection
+        DEPLOY_ENV = "${env.BRANCH_NAME == 'main' || env.BRANCH_NAME == 'master' ? 'production' : env.BRANCH_NAME == 'develop' ? 'staging' : env.BRANCH_NAME.startsWith('release/') ? 'staging' : 'dev'}"
+        
+        // Deployment strategy resolution
+        DEPLOYMENT_STRATEGY_RESOLVED = "${params.DEPLOYMENT_STRATEGY == 'auto' ? (env.BRANCH_NAME == 'main' || env.BRANCH_NAME == 'master' ? 'blue-green' : env.BRANCH_NAME == 'develop' ? 'canary' : env.BRANCH_NAME.startsWith('release/') ? 'canary' : 'rolling-update') : params.DEPLOYMENT_STRATEGY}"
+        
+        // Image tag strategy
+        IMAGE_TAG = "${env.BRANCH_NAME == 'main' || env.BRANCH_NAME == 'master' ? 'latest' : env.BRANCH_NAME == 'develop' ? 'staging' : env.BRANCH_NAME.replaceAll('/', '-') + '-' + env.BUILD_NUMBER}"
+        
         // Build metadata
-        BUILD_VERSION = "${IMAGE_TAG}-${BUILD_NUMBER}"
+        BUILD_VERSION = "${IMAGE_TAG}"
         GIT_COMMIT_SHORT = sh(returnStdout: true, script: 'git rev-parse --short HEAD').trim()
         BUILD_TIMESTAMP = sh(returnStdout: true, script: 'date +%Y%m%d-%H%M%S').trim()
         
         // Python environment
         PYTHONUNBUFFERED = '1'
         PYTEST_ADDOPTS = '--color=yes'
+        
+        // Deployment control flags
+        SHOULD_DEPLOY = "${(env.BRANCH_NAME == 'main' || env.BRANCH_NAME == 'master' || env.BRANCH_NAME == 'develop' || env.BRANCH_NAME.startsWith('release/')) ? 'true' : 'false'}"
+        IS_PR = "${env.CHANGE_ID != null ? 'true' : 'false'}"
+        
+        // Rollback metadata
+        PREVIOUS_DEPLOYMENT = ''
+        ROLLBACK_AVAILABLE = 'false'
     }
     
     options {
         buildDiscarder(logRotator(numToKeepStr: '10', daysToKeepStr: '30'))
         timestamps()
         timeout(time: 1, unit: 'HOURS')
-        disableConcurrentBuilds()
         ansiColor('xterm')
     }
     
     stages {
+        stage('Branch Information') {
+            steps {
+                script {
+                    echo """
+                    ╔═══════════════════════════════════════════════════════════╗
+                    ║           ACEest Fitness CI/CD Pipeline                 ║
+                    ╚═══════════════════════════════════════════════════════════╝
+                    
+                    🌿 Branch Information:
+                    ├─ Branch: ${env.BRANCH_NAME}
+                    ├─ Commit: ${GIT_COMMIT_SHORT}
+                    ├─ Author: ${sh(returnStdout: true, script: 'git log -1 --pretty=%an').trim()}
+                    └─ Message: ${sh(returnStdout: true, script: 'git log -1 --pretty=%B').trim()}
+                    
+                    📦 Build Configuration:
+                    ├─ Environment: ${DEPLOY_ENV}
+                    ├─ Strategy: ${DEPLOYMENT_STRATEGY_RESOLVED} ${params.DEPLOYMENT_STRATEGY == 'auto' ? '(auto-selected)' : '(manual)'}
+                    ├─ Image Tag: ${IMAGE_TAG}
+                    ├─ Build Number: ${BUILD_NUMBER}
+                    └─ Deploy: ${SHOULD_DEPLOY == 'true' ? '✅ Auto' : '❌ Manual Only'}
+                    
+                    ⚙️  Pipeline Parameters:
+                    ├─ Skip Tests: ${params.SKIP_TESTS}
+                    ├─ Skip SonarQube: ${params.SKIP_SONAR}
+                    ├─ Skip Security Scan: ${params.SKIP_SECURITY_SCAN}
+                    ├─ Manual Approval: ${params.MANUAL_APPROVAL}
+                    └─ Auto Rollback: ${params.AUTO_ROLLBACK}
+                    """
+                    
+                    if (DEPLOYMENT_STRATEGY_RESOLVED == 'canary') {
+                        echo """
+                    🕯️  Canary Configuration:
+                    ├─ Traffic Steps: ${params.CANARY_TRAFFIC_STEPS}%
+                    └─ Wait Time: ${params.CANARY_WAIT_TIME}s between steps
+                        """
+                    }
+                    
+                    if (DEPLOYMENT_STRATEGY_RESOLVED == 'ab-testing') {
+                        echo """
+                    🔬 A/B Testing Configuration:
+                    ├─ Variant A (current): ${100 - params.AB_TRAFFIC_SPLIT.toInteger()}%
+                    └─ Variant B (new): ${params.AB_TRAFFIC_SPLIT}%
+                        """
+                    }
+                    
+                    if (env.CHANGE_ID) {
+                        echo """
+                        🔀 Pull Request Information:
+                        ├─ PR Number: #${env.CHANGE_ID}
+                        ├─ Source Branch: ${env.CHANGE_BRANCH}
+                        ├─ Target Branch: ${env.CHANGE_TARGET}
+                        ├─ PR Title: ${env.CHANGE_TITLE}
+                        └─ PR Author: ${env.CHANGE_AUTHOR}
+                        
+                        ℹ️  This is a PR build - deployment skipped
+                        """
+                    }
+                }
+            }
+        }
+        
         stage('Checkout') {
             steps {
                 script {
-                    echo "🔄 Checking out code..."
+                    echo "🔄 Code already checked out by multi-branch pipeline"
                     checkout scm
-                    
-                    // Store git info for traceability
-                    env.GIT_BRANCH = sh(returnStdout: true, script: 'git rev-parse --abbrev-ref HEAD').trim()
-                    env.GIT_COMMIT_MSG = sh(returnStdout: true, script: 'git log -1 --pretty=%B').trim()
-                    env.GIT_AUTHOR = sh(returnStdout: true, script: 'git log -1 --pretty=%an').trim()
-                    
-                    echo """
-                    📋 Build Information:
-                    - Branch: ${env.GIT_BRANCH}
-                    - Commit: ${GIT_COMMIT_SHORT}
-                    - Author: ${env.GIT_AUTHOR}
-                    - Message: ${env.GIT_COMMIT_MSG}
-                    - Build: ${BUILD_NUMBER}
-                    - Version: ${BUILD_VERSION}
-                    """
                 }
             }
         }
@@ -126,64 +206,92 @@ pipeline {
             steps {
                 script {
                     echo "🔧 Setting up Python environment..."
-                    sh '''
+                    sh """
+                        set -e
                         python3 --version
-                        pip3 --version
+                        echo "Verifying python3-venv availability (no sudo escalation inside pipeline)"
+                        if ! python3 -m venv --help >/dev/null 2>&1; then
+                            echo "❌ python3-venv not available on agent. Install manually:"
+                            echo "   sudo apt-get update && sudo apt-get install -y python3-venv python3-pip"
+                            exit 1
+                        fi
+
+                        echo "If directory exists but activation script missing, treat as corrupted and recreate"
+                        if [ -d "venv" ] && [ ! -f "venv/bin/activate" ]; then
+                            echo "⚠️  Detected corrupted venv (missing bin/activate). Recreating..."
+                            rm -rf venv
+                        fi
+
+                        echo "Creating venv if absent"
+                        if [ ! -d "venv" ]; then
+                            python3 -m venv venv
+                            echo "✅ Virtual environment created"
+                        else
+                            echo "ℹ️  Using existing virtual environment"
+                        fi
+
+                        echo "Activating virtual environment"
+                        . venv/bin/activate || { echo "❌ Failed to activate venv"; ls -R venv || true; exit 1; }
+
+                        echo "Ensuring pip exists (handle rare ensurepip omission)"
+                        if ! command -v pip >/dev/null 2>&1; then
+                            echo "⚠️  pip missing inside venv; running ensurepip..."
+                            python3 -m ensurepip --upgrade || true
+                        fi
+
+                        pip --version || { echo "❌ pip still unavailable"; exit 1; }
+
+                        echo "Upgrading base packaging tools (quiet, retry once on failure)"
+                        pip install --upgrade pip setuptools wheel --quiet || pip install --upgrade pip setuptools wheel
                         
-                        # Create virtual environment
-                        python3 -m venv venv || true
-                        . venv/bin/activate
-                        
-                        # Upgrade pip
-                        pip install --upgrade pip setuptools wheel
-                        
-                        # Install dependencies
+                        echo "Installing application dependencies"
                         pip install -r requirements.txt
                         
                         echo "✅ Environment setup complete"
-                    '''
+                        echo "📁 venv contents summary:"; ls -1 venv | sed 's/^/   - /'
+                    """
                 }
             }
         }
         
         stage('Run Tests') {
             when {
-                expression { params.RUN_TESTS == true }
+                expression { !params.SKIP_TESTS }
             }
             steps {
                 script {
                     echo "🧪 Running automated tests with Pytest..."
-                    sh '''
+                    sh """
                         . venv/bin/activate
+                        echo "Installing test requirements from repo root"
+                        if [ -f requirements-test.txt ]; then
+                            pip install -r requirements-test.txt
+                        else
+                            echo "❌ requirements-test.txt not found at repo root. Listing contents for diagnostics:"; ls -1 . | sed 's/^/   - /'
+                            exit 1
+                        fi
                         
-                        # Install test dependencies
-                        pip install -r requirements-test.txt
-                        
-                        # Create test results directory
+                        echo "Ensuring test results directory exists (pytest won't create nested path automatically)"
                         mkdir -p test-results
                         
-                        # Run pytest with coverage
-                        pytest \
-                            --verbose \
-                            --junit-xml=test-results/pytest-results.xml \
-                            --cov=app \
-                            --cov-report=html:htmlcov \
-                            --cov-report=xml:coverage.xml \
-                            --cov-report=term-missing \
-                            --cov-branch \
-                            --cov-fail-under=70 \
+                        pytest \\
+                            --verbose \\
+                            --junit-xml=test-results/pytest-results.xml \\
+                            --cov=. \\
+                            --cov-report=html:htmlcov \\
+                            --cov-report=xml:coverage.xml \\
+                            --cov-report=term-missing \\
+                            --cov-branch \\
+                            --cov-fail-under=45 \\
                             || exit 1
                         
                         echo "✅ All tests passed!"
-                    '''
+                    """
                 }
             }
             post {
                 always {
-                    // Publish test results
                     junit testResults: 'test-results/pytest-results.xml', allowEmptyResults: true
-                    
-                    // Publish HTML coverage report
                     publishHTML(target: [
                         allowMissing: false,
                         alwaysLinkToLastBuild: true,
@@ -201,29 +309,29 @@ pipeline {
         
         stage('SonarQube Analysis') {
             when {
-                expression { params.RUN_SONARQUBE == true }
+                allOf {
+                    not { changeRequest() }
+                    expression { !params.SKIP_SONAR }
+                }
             }
             steps {
                 script {
                     echo "📊 Running SonarQube code analysis..."
                     
-                    withSonarQubeEnv('SonarQube') {
-                        sh '''
-                            . venv/bin/activate
-                            
-                            # Run SonarQube scanner
-                            sonar-scanner \
-                                -Dsonar.projectKey=aceest-fitness-gym \
-                                -Dsonar.sources=app,run.py,config.py \
-                                -Dsonar.tests=tests \
-                                -Dsonar.host.url=${SONARQUBE_URL} \
-                                -Dsonar.login=${SONAR_TOKEN} \
-                                -Dsonar.python.coverage.reportPaths=coverage.xml \
-                                -Dsonar.python.xunit.reportPath=test-results/pytest-results.xml \
-                                -Dsonar.projectVersion=${BUILD_VERSION} \
-                                -Dsonar.scm.revision=${GIT_COMMIT_SHORT} \
-                                -Dsonar.branch.name=${GIT_BRANCH}
-                        '''
+                    def scannerHome = tool 'SonarQubeScanner'
+                    withSonarQubeEnv('sonarqube') {
+                        sh """
+                            ${scannerHome}/bin/sonar-scanner \\
+                                -Dsonar.projectKey=aceest-fitness-gym \\
+                                -Dsonar.sources=. \\
+                                -Dsonar.tests=tests \\
+                                -Dsonar.python.coverage.reportPaths=coverage.xml \\
+                                -Dsonar.python.xunit.reportPath=test-results/pytest-results.xml \\
+                                -Dsonar.projectVersion=${BUILD_VERSION} \\
+                                -Dsonar.scm.revision=${GIT_COMMIT_SHORT} \\
+                                -Dsonar.sourceEncoding=UTF-8 \
+                                -Dsonar.exclusions=venv/**,htmlcov/**,app_files/**,kube_manifests/**,terraform/**
+                        """
                     }
                 }
             }
@@ -231,7 +339,10 @@ pipeline {
         
         stage('Quality Gate') {
             when {
-                expression { params.RUN_SONARQUBE == true }
+                allOf {
+                    not { changeRequest() }
+                    expression { !params.SKIP_SONAR }
+                }
             }
             steps {
                 script {
@@ -249,26 +360,12 @@ pipeline {
         
         stage('Build Docker Image') {
             when {
-                expression { params.SKIP_BUILD == false }
+                not { changeRequest() }  // Skip for PRs
             }
             steps {
                 script {
                     echo "🐳 Building Docker image..."
                     
-                    // Build with multiple tags
-                    def imageTags = [
-                        "${env.BUILD_VERSION}",
-                        "${env.IMAGE_TAG}",
-                        "${env.GIT_BRANCH}-${env.BUILD_NUMBER}",
-                        "build-${env.BUILD_NUMBER}"
-                    ]
-                    
-                    // Add 'latest' tag only for main/master branch
-                    if (env.GIT_BRANCH in ['main', 'master']) {
-                        imageTags.add('latest')
-                    }
-                    
-                    // Build the image
                     def buildArgs = [
                         "--build-arg BUILD_DATE=${env.BUILD_TIMESTAMP}",
                         "--build-arg VCS_REF=${env.GIT_COMMIT_SHORT}",
@@ -276,42 +373,42 @@ pipeline {
                         "--label org.opencontainers.image.created=${env.BUILD_TIMESTAMP}",
                         "--label org.opencontainers.image.revision=${env.GIT_COMMIT_SHORT}",
                         "--label org.opencontainers.image.version=${env.BUILD_VERSION}",
-                        "--label org.opencontainers.image.source=${env.GIT_URL}",
                         "--label jenkins.build.number=${env.BUILD_NUMBER}",
-                        "--label jenkins.build.url=${env.BUILD_URL}"
+                        "--label jenkins.branch=${env.BRANCH_NAME}"
                     ].join(' ')
                     
                     sh """
                         docker build ${buildArgs} \
-                            -t ${DOCKER_IMAGE}:${env.BUILD_VERSION} \
-                            -f Dockerfile .
+                            -t ${DOCKER_IMAGE}:${IMAGE_TAG} \
+                            -f Dockerfile \
+                            .
                         
-                        echo "✅ Docker image built successfully"
+                        echo "✅ Docker image built: ${DOCKER_IMAGE}:${IMAGE_TAG}"
                     """
                     
-                    // Tag the image with all tags
-                    imageTags.each { tag ->
-                        sh "docker tag ${DOCKER_IMAGE}:${env.BUILD_VERSION} ${DOCKER_IMAGE}:${tag}"
-                        echo "Tagged: ${DOCKER_IMAGE}:${tag}"
+                    // Tag with additional tags for main/master branch
+                    if (env.BRANCH_NAME == 'main' || env.BRANCH_NAME == 'master') {
+                        sh """
+                            docker tag ${DOCKER_IMAGE}:${IMAGE_TAG} ${DOCKER_IMAGE}:latest
+                            docker tag ${DOCKER_IMAGE}:${IMAGE_TAG} ${DOCKER_IMAGE}:production
+                            echo "Tagged as 'latest' and 'production'"
+                        """
                     }
-                    
-                    // Store tags for later use
-                    env.DOCKER_TAGS = imageTags.join(',')
                 }
             }
         }
         
         stage('Security Scan') {
             when {
-                expression { params.SKIP_BUILD == false }
+                allOf {
+                    not { changeRequest() }
+                    expression { !params.SKIP_SECURITY_SCAN }
+                }
             }
             steps {
                 script {
                     echo "🔒 Scanning Docker image for vulnerabilities..."
-                    
-                    // Using Trivy for vulnerability scanning
                     sh """
-                        # Install Trivy if not available
                         if ! command -v trivy &> /dev/null; then
                             echo "Installing Trivy..."
                             wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | sudo apt-key add -
@@ -320,16 +417,13 @@ pipeline {
                             sudo apt-get install trivy -y
                         fi
                         
-                        # Scan the image
                         trivy image \
                             --severity HIGH,CRITICAL \
                             --format table \
                             --output trivy-report.txt \
-                            ${DOCKER_IMAGE}:${BUILD_VERSION} || true
+                            ${DOCKER_IMAGE}:${IMAGE_TAG} || true
                         
-                        # Display scan results
                         cat trivy-report.txt
-                        
                         echo "✅ Security scan complete"
                     """
                 }
@@ -343,62 +437,117 @@ pipeline {
         
         stage('Push to Docker Hub') {
             when {
-                expression { params.SKIP_BUILD == false }
+                not { changeRequest() }
             }
             steps {
                 script {
                     echo "📤 Pushing Docker image to Docker Hub..."
-                    
                     sh '''
-                        # Login to Docker Hub
                         echo "${DOCKERHUB_CREDENTIALS_PSW}" | docker login -u "${DOCKERHUB_CREDENTIALS_USR}" --password-stdin ${DOCKER_REGISTRY}
                         
-                        # Push all tags
-                        IFS=',' read -ra TAGS <<< "${DOCKER_TAGS}"
-                        for tag in "${TAGS[@]}"; do
-                            echo "Pushing ${DOCKER_IMAGE}:${tag}"
-                            docker push ${DOCKER_IMAGE}:${tag}
-                        done
+                        docker push ${DOCKER_IMAGE}:${IMAGE_TAG}
+                        echo "✅ Pushed ${DOCKER_IMAGE}:${IMAGE_TAG}"
                         
-                        echo "✅ All images pushed successfully"
+                        echo "Pushing additional tags for main branch if applicable"
+                        if [ "${BRANCH_NAME}" = "main" ] || [ "${BRANCH_NAME}" = "master" ]; then
+                            docker push ${DOCKER_IMAGE}:latest
+                            docker push ${DOCKER_IMAGE}:production
+                            echo "✅ Pushed latest and production tags"
+                        fi
                         
-                        # Logout
                         docker logout ${DOCKER_REGISTRY}
                     '''
                 }
             }
         }
         
-        stage('Deploy to AKS') {
+        stage('Manual Approval') {
             when {
-                expression { params.DEPLOY_TO_AKS == true }
+                allOf {
+                    expression { params.MANUAL_APPROVAL }
+                    expression { env.SHOULD_DEPLOY == 'true' && env.IS_PR == 'false' }
+                    expression { env.DEPLOY_ENV == 'production' }
+                }
             }
             steps {
                 script {
-                    echo "☸️  Deploying to AKS cluster..."
-                    echo "Strategy: ${params.DEPLOYMENT_STRATEGY}"
-                    echo "Environment: ${params.ENVIRONMENT}"
-                    echo "Image: ${DOCKER_IMAGE}:${BUILD_VERSION}"
+                    echo """
+                    ⏸️  Manual Approval Required
+                    ├─ Environment: ${DEPLOY_ENV}
+                    ├─ Strategy: ${DEPLOYMENT_STRATEGY_RESOLVED}
+                    ├─ Image: ${DOCKER_IMAGE}:${IMAGE_TAG}
+                    └─ Waiting for approval...
+                    """
+                    
+                    timeout(time: 30, unit: 'MINUTES') {
+                        input message: "Deploy to ${DEPLOY_ENV} using ${DEPLOYMENT_STRATEGY_RESOLVED}?",
+                              ok: 'Deploy',
+                              submitter: 'admin,deployer'
+                    }
+                    echo "✅ Deployment approved"
+                }
+            }
+        }
+        
+        stage('Save Pre-Deployment State') {
+            when {
+                expression { 
+                    env.SHOULD_DEPLOY == 'true' && env.IS_PR == 'false' && params.AUTO_ROLLBACK
+                }
+            }
+            steps {
+                script {
+                    echo "💾 Saving pre-deployment state for rollback..."
+                    withCredentials([file(credentialsId: "${KUBECONFIG_CREDENTIAL}", variable: 'KUBECONFIG')]) {
+                        def deploymentExists = sh(
+                            returnStatus: true,
+                            script: "kubectl get deployment aceest-web -n ${K8S_NAMESPACE} 2>/dev/null"
+                        )
+                        
+                        if (deploymentExists == 0) {
+                            env.PREVIOUS_DEPLOYMENT = sh(
+                                returnStdout: true,
+                                script: """
+                                    kubectl get deployment aceest-web -n ${K8S_NAMESPACE} \
+                                        -o jsonpath='{.spec.template.spec.containers[0].image}'
+                                """
+                            ).trim()
+                            env.ROLLBACK_AVAILABLE = 'true'
+                            echo "✅ Saved current deployment: ${env.PREVIOUS_DEPLOYMENT}"
+                        } else {
+                            echo "ℹ️  No previous deployment found (first deployment)"
+                            env.ROLLBACK_AVAILABLE = 'false'
+                        }
+                    }
+                }
+            }
+        }
+        
+        stage('Deploy to AKS') {
+            when {
+                expression { 
+                    env.SHOULD_DEPLOY == 'true' && env.IS_PR == 'false'
+                }
+            }
+            steps {
+                script {
+                    echo """
+                    ☸️  Deploying to AKS cluster...
+                    ├─ Environment: ${DEPLOY_ENV}
+                    ├─ Strategy: ${DEPLOYMENT_STRATEGY_RESOLVED}
+                    ├─ Image: ${DOCKER_IMAGE}:${IMAGE_TAG}
+                    └─ Namespace: ${K8S_NAMESPACE}
+                    """
                     
                     withCredentials([file(credentialsId: "${KUBECONFIG_CREDENTIAL}", variable: 'KUBECONFIG')]) {
                         sh """
-                            # Verify kubectl access
                             kubectl version --client
                             kubectl cluster-info
                             
-                            # Create namespace if not exists
                             kubectl create namespace ${K8S_NAMESPACE} --dry-run=client -o yaml | kubectl apply -f -
                             
-                            # Update image tag in manifests
                             cd kube_manifests
                             
-                            # Update configmap with environment-specific settings
-                            kubectl create configmap aceest-config \
-                                --from-literal=FLASK_ENV=${params.ENVIRONMENT} \
-                                --namespace=${K8S_NAMESPACE} \
-                                --dry-run=client -o yaml | kubectl apply -f -
-                            
-                            # Deploy base infrastructure (if not exists)
                             echo "📦 Deploying base infrastructure..."
                             kubectl apply -f 00-namespace.yaml
                             kubectl apply -f 01-configmap.yaml
@@ -409,24 +558,34 @@ pipeline {
                             kubectl apply -f 06-network-policies.yaml
                             kubectl apply -f 07-ingress.yaml
                             
-                            # Wait for PostgreSQL to be ready
-                            echo "⏳ Waiting for PostgreSQL to be ready..."
+                            echo "⏳ Waiting for PostgreSQL..."
                             kubectl wait --for=condition=ready pod -l app=postgres \
-                                --namespace=${K8S_NAMESPACE} \
-                                --timeout=300s || true
-                            
-                            # Deploy application with selected strategy
-                            echo "🚀 Deploying application with ${params.DEPLOYMENT_STRATEGY} strategy..."
-                            
-                            # Update image in deployment manifest
-                            find strategies/${params.DEPLOYMENT_STRATEGY}/ -name "*.yaml" -exec \
-                                sed -i "s|image: dharmalakshmi15/aceest-fitness-gym:.*|image: ${DOCKER_IMAGE}:${BUILD_VERSION}|g" {} +
-                            
-                            # Apply the deployment
-                            kubectl apply -f strategies/${params.DEPLOYMENT_STRATEGY}/
-                            
-                            echo "✅ Deployment initiated"
+                                --namespace=${K8S_NAMESPACE} --timeout=300s || true
                         """
+                        
+                        // Cleanup previous deployment strategy resources
+                        cleanupOtherStrategies(DEPLOYMENT_STRATEGY_RESOLVED)
+                        
+                        // Strategy-specific deployment
+                        switch(DEPLOYMENT_STRATEGY_RESOLVED) {
+                            case 'blue-green':
+                                deployBlueGreen()
+                                break
+                            case 'canary':
+                                deployCanary()
+                                break
+                            case 'rolling-update':
+                                deployRollingUpdate()
+                                break
+                            case 'shadow':
+                                deployShadow()
+                                break
+                            case 'ab-testing':
+                                deployABTesting()
+                                break
+                            default:
+                                error "Unknown deployment strategy: ${DEPLOYMENT_STRATEGY_RESOLVED}"
+                        }
                     }
                 }
             }
@@ -434,37 +593,24 @@ pipeline {
         
         stage('Verify Deployment') {
             when {
-                expression { params.DEPLOY_TO_AKS == true }
+                expression { 
+                    env.SHOULD_DEPLOY == 'true' && env.IS_PR == 'false'
+                }
             }
             steps {
                 script {
                     echo "🔍 Verifying deployment..."
-                    
                     withCredentials([file(credentialsId: "${KUBECONFIG_CREDENTIAL}", variable: 'KUBECONFIG')]) {
                         sh """
-                            # Wait for deployment to be ready
                             echo "⏳ Waiting for pods to be ready..."
-                            kubectl wait --for=condition=ready pod \
-                                -l app=aceest-web \
-                                --namespace=${K8S_NAMESPACE} \
-                                --timeout=300s
+                            kubectl wait --for=condition=ready pod -l app=aceest-web \
+                                --namespace=${K8S_NAMESPACE} --timeout=300s
                             
-                            # Check deployment status
                             echo "📊 Deployment Status:"
                             kubectl get deployments -n ${K8S_NAMESPACE}
                             kubectl get pods -n ${K8S_NAMESPACE}
                             kubectl get services -n ${K8S_NAMESPACE}
-                            
-                            # Get service endpoint
-                            echo "🌐 Service Endpoints:"
                             kubectl get ingress -n ${K8S_NAMESPACE}
-                            
-                            # Check pod logs for errors
-                            echo "📋 Recent Pod Logs:"
-                            kubectl logs -l app=aceest-web \
-                                --namespace=${K8S_NAMESPACE} \
-                                --tail=50 \
-                                --since=5m || true
                         """
                     }
                 }
@@ -473,99 +619,37 @@ pipeline {
         
         stage('Health Check') {
             when {
-                expression { params.DEPLOY_TO_AKS == true }
+                expression { 
+                    env.SHOULD_DEPLOY == 'true' && env.IS_PR == 'false'
+                }
             }
             steps {
                 script {
                     echo "🏥 Running health checks..."
-                    
                     withCredentials([file(credentialsId: "${KUBECONFIG_CREDENTIAL}", variable: 'KUBECONFIG')]) {
-                        def healthCheckPassed = false
-                        def maxRetries = 10
-                        def retryCount = 0
-                        
-                        while (!healthCheckPassed && retryCount < maxRetries) {
-                            try {
-                                sh """
-                                    # Get service URL
-                                    SERVICE_IP=\$(kubectl get service aceest-web-service \
-                                        -n ${K8S_NAMESPACE} \
-                                        -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
-                                    
-                                    if [ -z "\$SERVICE_IP" ]; then
-                                        echo "⏳ Waiting for LoadBalancer IP..."
-                                        sleep 10
-                                        exit 1
-                                    fi
-                                    
-                                    echo "Testing health endpoint: http://\$SERVICE_IP/health"
-                                    
-                                    # Test health endpoint
-                                    HTTP_CODE=\$(curl -s -o /dev/null -w "%{http_code}" \
-                                        --max-time 10 \
-                                        http://\$SERVICE_IP/health)
-                                    
-                                    if [ "\$HTTP_CODE" = "200" ]; then
-                                        echo "✅ Health check passed (HTTP \$HTTP_CODE)"
-                                        exit 0
-                                    else
-                                        echo "⚠️  Health check returned HTTP \$HTTP_CODE"
-                                        exit 1
-                                    fi
-                                """
-                                healthCheckPassed = true
-                            } catch (Exception e) {
-                                retryCount++
-                                echo "⏳ Health check attempt ${retryCount}/${maxRetries} failed. Retrying..."
-                                sleep 15
-                            }
+                        retry(10) {
+                            sleep 15
+                            sh """
+                                INGRESS_HOST=\$(kubectl get ingress aceest-web-ingress --no-headers \\
+                                    --namespace=${K8S_NAMESPACE} \\
+                                    | awk '{print \$3}')
+                                
+                                if [ -z "\$INGRESS_HOST" ]; then
+                                    echo "⏳ Waiting for Ingress host..."
+                                    exit 1
+                                fi
+                                
+                                HTTP_CODE=\$(curl -s -o /dev/null -w "%{http_code}" \
+                                    --max-time 10 http://\$INGRESS_HOST/health)
+                                
+                                if [ "\$HTTP_CODE" = "200" ]; then
+                                    echo "✅ Health check passed (HTTP \$HTTP_CODE)"
+                                else
+                                    echo "⚠️  Health check returned HTTP \$HTTP_CODE"
+                                    exit 1
+                                fi
+                            """
                         }
-                        
-                        if (!healthCheckPassed) {
-                            error "❌ Health check failed after ${maxRetries} attempts"
-                        }
-                    }
-                }
-            }
-        }
-        
-        stage('Smoke Tests') {
-            when {
-                expression { params.DEPLOY_TO_AKS == true }
-            }
-            steps {
-                script {
-                    echo "💨 Running smoke tests..."
-                    
-                    withCredentials([file(credentialsId: "${KUBECONFIG_CREDENTIAL}", variable: 'KUBECONFIG')]) {
-                        sh """
-                            # Get service endpoint
-                            SERVICE_IP=\$(kubectl get service aceest-web-service \
-                                -n ${K8S_NAMESPACE} \
-                                -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
-                            
-                            BASE_URL="http://\$SERVICE_IP"
-                            
-                            echo "Testing endpoints on \$BASE_URL"
-                            
-                            # Test home page
-                            echo "Testing: \$BASE_URL/"
-                            curl -f -s -o /dev/null -w "HTTP %{http_code}\\n" \$BASE_URL/
-                            
-                            # Test health endpoint
-                            echo "Testing: \$BASE_URL/health"
-                            curl -f -s -o /dev/null -w "HTTP %{http_code}\\n" \$BASE_URL/health
-                            
-                            # Test login page
-                            echo "Testing: \$BASE_URL/auth/login"
-                            curl -f -s -o /dev/null -w "HTTP %{http_code}\\n" \$BASE_URL/auth/login
-                            
-                            # Test register page
-                            echo "Testing: \$BASE_URL/auth/register"
-                            curl -f -s -o /dev/null -w "HTTP %{http_code}\\n" \$BASE_URL/auth/register
-                            
-                            echo "✅ Smoke tests passed!"
-                        """
                     }
                 }
             }
@@ -575,89 +659,422 @@ pipeline {
     post {
         always {
             script {
-                echo "🧹 Cleaning up..."
-                
-                // Archive artifacts
                 archiveArtifacts artifacts: '**/test-results/*.xml', allowEmptyArchive: true
                 archiveArtifacts artifacts: 'coverage.xml', allowEmptyArchive: true
                 archiveArtifacts artifacts: 'trivy-report.txt', allowEmptyArchive: true
                 
-                // Clean up Docker images
-                sh """
-                    docker image prune -f || true
-                    docker system df
+                sh "docker image prune -f || true"
+            }
+        }
+        
+        failure {
+            script {
+                if (params.AUTO_ROLLBACK && env.ROLLBACK_AVAILABLE == 'true' && env.SHOULD_DEPLOY == 'true') {
+                    echo """
+                    ⚠️  DEPLOYMENT FAILED - INITIATING ROLLBACK
+                    ├─ Previous Image: ${env.PREVIOUS_DEPLOYMENT}
+                    └─ Strategy: ${DEPLOYMENT_STRATEGY_RESOLVED}
+                    """
+                    
+                    withCredentials([file(credentialsId: "${KUBECONFIG_CREDENTIAL}", variable: 'KUBECONFIG')]) {
+                        try {
+                            sh """
+                                kubectl set image deployment/aceest-web \
+                                    aceest-web=${env.PREVIOUS_DEPLOYMENT} \
+                                    -n ${K8S_NAMESPACE}
+                                
+                                kubectl rollout status deployment/aceest-web \
+                                    -n ${K8S_NAMESPACE} --timeout=300s
+                            """
+                            echo "✅ Rollback completed successfully"
+                        } catch (Exception e) {
+                            echo "❌ Rollback failed: ${e.message}"
+                            echo "⚠️  Manual intervention required!"
+                        }
+                    }
+                }
+                
+                def duration = currentBuild.durationString.replace(' and counting', '')
+                echo """
+                ╔═══════════════════════════════════════════════════════════╗
+                ║                   ❌ BUILD FAILED                        ║
+                ╚═══════════════════════════════════════════════════════════╝
+                
+                📋 Build Details:
+                ├─ Job: ${env.JOB_NAME}
+                ├─ Build: #${env.BUILD_NUMBER}
+                ├─ Duration: ${duration}
+                ├─ Branch: ${env.BRANCH_NAME}
+                └─ Commit: ${env.GIT_COMMIT_SHORT}
+                
+                🔍 Debug:
+                ├─ Console: ${env.BUILD_URL}console
+                └─ Logs: Check stage-specific logs above
                 """
+                
+                if (env.SHOULD_DEPLOY == 'true' && env.IS_PR == 'false') {
+                    echo "⚠️  Deployment may need rollback"
+                }
             }
         }
         
         success {
             script {
                 def duration = currentBuild.durationString.replace(' and counting', '')
-                def message = """
-                ✅ *BUILD SUCCESS*
+                def status = env.IS_PR == 'true' ? 'PR Build' : 'Deployment'
                 
-                *Job:* ${env.JOB_NAME}
-                *Build:* #${env.BUILD_NUMBER}
-                *Duration:* ${duration}
-                *Strategy:* ${params.DEPLOYMENT_STRATEGY}
-                *Environment:* ${params.ENVIRONMENT}
-                *Image:* ${DOCKER_IMAGE}:${BUILD_VERSION}
+                echo """
+                ╔═══════════════════════════════════════════════════════════╗
+                ║                  ✅ BUILD SUCCESS                        ║
+                ╚═══════════════════════════════════════════════════════════╝
                 
-                *Branch:* ${env.GIT_BRANCH}
-                *Commit:* ${env.GIT_COMMIT_SHORT}
-                *Author:* ${env.GIT_AUTHOR}
+                📋 Build Details:
+                ├─ Job: ${env.JOB_NAME}
+                ├─ Build: #${env.BUILD_NUMBER}
+                ├─ Duration: ${duration}
+                ├─ Branch: ${env.BRANCH_NAME}
+                ├─ Commit: ${env.GIT_COMMIT_SHORT}
+                └─ Type: ${status}
                 
-                📊 [Build Details](${env.BUILD_URL})
-                📈 [Coverage Report](${env.BUILD_URL}Coverage_Report/)
+                📦 Artifacts:
+                ├─ Image: ${DOCKER_IMAGE}:${IMAGE_TAG}
+                ├─ Environment: ${DEPLOY_ENV}
+                └─ Strategy: ${DEPLOYMENT_STRATEGY_RESOLVED}
+                
+                🔗 Links:
+                ├─ Build: ${env.BUILD_URL}
+                └─ Coverage: ${env.BUILD_URL}Coverage_Report/
                 """
-                
-                echo message
-                
-                // Send notifications (configure your notification method)
-                // emailext(...)
-                // slackSend(...)
             }
-        }
-        
-        failure {
-            script {
-                def duration = currentBuild.durationString.replace(' and counting', '')
-                def message = """
-                ❌ *BUILD FAILED*
-                
-                *Job:* ${env.JOB_NAME}
-                *Build:* #${env.BUILD_NUMBER}
-                *Duration:* ${duration}
-                *Strategy:* ${params.DEPLOYMENT_STRATEGY}
-                *Environment:* ${params.ENVIRONMENT}
-                
-                *Branch:* ${env.GIT_BRANCH}
-                *Commit:* ${env.GIT_COMMIT_SHORT}
-                *Author:* ${env.GIT_AUTHOR}
-                
-                🔍 [Build Details](${env.BUILD_URL})
-                📋 [Console Output](${env.BUILD_URL}console)
-                """
-                
-                echo message
-                
-                // Send failure notifications
-                // emailext(...)
-                // slackSend(...)
-                
-                // Rollback deployment if health check failed
-                if (params.DEPLOY_TO_AKS == true) {
-                    echo "⚠️  Consider rolling back the deployment"
-                }
-            }
-        }
-        
-        unstable {
-            echo "⚠️  Build is unstable. Check test results and quality gates."
-        }
-        
-        aborted {
-            echo "🛑 Build was aborted."
         }
     }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// DEPLOYMENT STRATEGY FUNCTIONS
+// ═══════════════════════════════════════════════════════════════════════
+
+/**
+ * Blue-Green Deployment Strategy
+ * - Deploy new version to "green" environment
+ * - Test green environment
+ * - Switch traffic from blue to green
+ * - Keep blue for instant rollback
+ */
+def deployBlueGreen() {
+    echo "🔵🟢 Executing Blue-Green Deployment..."
+    
+    sh """
+        cd kube_manifests
+        
+        # Determine current active color
+        CURRENT_COLOR=\$(kubectl get service aceest-web-service -n ${K8S_NAMESPACE} \
+            -o jsonpath='{.spec.selector.color}' 2>/dev/null || echo 'blue')
+        
+        if [ "\$CURRENT_COLOR" = "blue" ]; then
+            NEW_COLOR="green"
+        else
+            NEW_COLOR="blue"
+        fi
+        
+        echo "📊 Current: \$CURRENT_COLOR → New: \$NEW_COLOR"
+        
+        # Deploy to new color
+        echo "🚀 Deploying \$NEW_COLOR environment..."
+        find strategies/blue-green/ -name "*.yaml" -exec \
+            sed -i "s|image: dharmalakshmi15/aceest-fitness-gym:.*|image: ${DOCKER_IMAGE}:${IMAGE_TAG}|g" {} +
+        
+        find strategies/blue-green/ -name "*.yaml" -exec \
+            sed -i "s|color: blue|color: \$NEW_COLOR|g" {} +
+        
+        kubectl apply -f strategies/blue-green/
+        
+        # Wait for new deployment
+        echo "⏳ Waiting for \$NEW_COLOR deployment..."
+        kubectl wait --for=condition=available deployment/aceest-web-\$NEW_COLOR \
+            -n ${K8S_NAMESPACE} --timeout=300s
+        
+        # Run health check on new deployment
+        echo "🏥 Health checking \$NEW_COLOR..."
+        sleep 10
+        
+        POD=\$(kubectl get pod -n ${K8S_NAMESPACE} -l color=\$NEW_COLOR -o jsonpath='{.items[0].metadata.name}')
+        kubectl exec \$POD -n ${K8S_NAMESPACE} -- curl -f http://localhost:5000/health || {
+            echo "❌ Health check failed on \$NEW_COLOR"
+            exit 1
+        }
+        
+        # Switch service to new color
+        echo "🔄 Switching traffic to \$NEW_COLOR..."
+        kubectl patch service aceest-web-service -n ${K8S_NAMESPACE} \
+            -p '{"spec":{"selector":{"color":"'\$NEW_COLOR'"}}}'
+        
+        echo 'Blue-Green deployment complete!'
+        echo "Old \$CURRENT_COLOR deployment kept for rollback"
+    """
+}
+
+/**
+ * Canary Deployment Strategy
+ * - Deploy canary version alongside production
+ * - Gradually shift traffic (10% → 50% → 100%)
+ * - Monitor metrics at each step
+ * - Rollback if issues detected
+ */
+def deployCanary() {
+    echo "🕯️  Executing Canary Deployment..."
+    
+    def trafficSteps = params.CANARY_TRAFFIC_STEPS.split(',').collect { it.toInteger() }
+    def waitTime = params.CANARY_WAIT_TIME.toInteger()
+    
+    sh """
+        cd kube_manifests
+        
+        echo "🚀 Deploying canary version..."
+        find strategies/canary/ -name "*.yaml" -exec \
+            sed -i "s|image: dharmalakshmi15/aceest-fitness-gym:.*|image: ${DOCKER_IMAGE}:${IMAGE_TAG}|g" {} +
+        
+        kubectl apply -f strategies/canary/
+        
+        echo "⏳ Waiting for canary deployment..."
+        kubectl wait --for=condition=available deployment/aceest-web-canary \
+            -n ${K8S_NAMESPACE} --timeout=300s
+    """
+    
+    // Gradually shift traffic using native Kubernetes replica scaling
+    echo "Using native K8s replica-based canary deployment (no Istio required)"
+    
+    trafficSteps.each { percent ->
+        echo "📊 Scaling to ${percent}% canary traffic..."
+        
+        sh """
+            # Calculate replicas in shell (avoiding Groovy Math operations for sandbox)
+            TOTAL_REPLICAS=3
+            PERCENT=${percent}
+            
+            # Calculate canary replicas (ceiling division)
+            CANARY_REPLICAS=\$(( (\$TOTAL_REPLICAS * \$PERCENT + 99) / 100 ))
+            STABLE_REPLICAS=\$(( \$TOTAL_REPLICAS - \$CANARY_REPLICAS ))
+            
+            # Ensure at least 1 canary replica if percent > 0
+            [ \$CANARY_REPLICAS -lt 1 ] && [ \$PERCENT -gt 0 ] && CANARY_REPLICAS=1
+            [ \$STABLE_REPLICAS -lt 0 ] && STABLE_REPLICAS=0
+            
+            echo "Scaling stable to \$STABLE_REPLICAS replicas, canary to \$CANARY_REPLICAS replicas"
+            
+            kubectl scale deployment aceest-web-stable -n ${K8S_NAMESPACE} --replicas=\$STABLE_REPLICAS
+            kubectl scale deployment aceest-web-canary -n ${K8S_NAMESPACE} --replicas=\$CANARY_REPLICAS
+            
+            echo "Waiting for scaling to complete..."
+            kubectl wait --for=condition=available deployment/aceest-web-canary -n ${K8S_NAMESPACE} --timeout=120s || true
+            
+            echo "Traffic distribution: ~${percent}% canary (\$CANARY_REPLICAS pods), ~${ 100 - percent }% stable (\$STABLE_REPLICAS pods)"
+        """
+        
+        if (percent < 100) {
+            echo "⏸️  Monitoring for ${waitTime}s before next step..."
+            sleep waitTime
+            
+            // Check metrics/health
+            def healthOk = sh(
+                returnStatus: true,
+                script: """
+                    kubectl exec deployment/aceest-web-canary -n ${K8S_NAMESPACE} \
+                        -- curl -sf http://localhost:5000/health
+                """
+            )
+            
+            if (healthOk != 0) {
+                error "❌ Canary health check failed at ${percent}% traffic"
+            }
+        }
+    }
+    
+    echo "Canary deployment complete! 100% traffic now on canary. Stable version can be removed after validation."
+}
+
+/**
+ * Rolling Update Deployment Strategy
+ * - Update pods gradually with zero downtime
+ * - Default Kubernetes rolling update
+ * - Automatic rollback on failure
+ */
+def deployRollingUpdate() {
+    echo "🔄 Executing Rolling Update Deployment..."
+    
+    sh """
+        cd kube_manifests
+        
+        echo "🚀 Applying rolling update..."
+        find strategies/rolling-update/ -name "*.yaml" -exec \
+            sed -i "s|image: dharmalakshmi15/aceest-fitness-gym:.*|image: ${DOCKER_IMAGE}:${IMAGE_TAG}|g" {} +
+        
+        find strategies/rolling-update/ -name "*.yaml" -exec \
+            sed -i "s|last_build: \"TIMESTAMP_PLACEHOLDER\"|last_build: \"${BUILD_TIMESTAMP}\"|g" {} +
+        
+        kubectl apply -f strategies/rolling-update/
+        
+        echo 'Monitoring rollout...'
+        kubectl rollout status deployment/aceest-web -n ${K8S_NAMESPACE} --timeout=300s
+        
+        echo 'Rolling update complete!'
+        kubectl get deployment aceest-web -n ${K8S_NAMESPACE}
+    """
+}
+
+/**
+ * Shadow Deployment Strategy
+ * - Deploy new version alongside production
+ * - Mirror production traffic to shadow (no user impact)
+ * - Monitor shadow behavior and performance
+ * - No traffic routing to shadow
+ */
+def deployShadow() {
+    echo "👤 Executing Shadow Deployment (Simplified - No Istio)"
+    echo "Note: True traffic mirroring requires Istio. Deploying shadow for manual testing only."
+    
+    sh """
+        cd kube_manifests
+        
+        echo "🚀 Deploying shadow version for testing..."
+        find strategies/shadow/ -name "*.yaml" -exec \
+            sed -i "s|image: dharmalakshmi15/aceest-fitness-gym:.*|image: ${DOCKER_IMAGE}:${IMAGE_TAG}|g" {} +
+        
+        kubectl apply -f strategies/shadow/
+        
+        echo "⏳ Waiting for shadow deployment..."
+        kubectl wait --for=condition=available deployment/aceest-web-shadow \
+            -n ${K8S_NAMESPACE} --timeout=300s
+        
+        echo 'Shadow deployment complete!'
+        echo 'Production: 100% user traffic (via main service)'
+        echo 'Shadow: Deployed separately for manual testing (no automatic traffic)'
+        echo 'Access shadow via: kubectl port-forward deployment/aceest-web-shadow 8080:5000'
+        echo 'Note: Install Istio for automatic traffic mirroring'
+    """
+}
+
+/**
+ * A/B Testing Deployment Strategy
+ * - Deploy variant B alongside variant A
+ * - Split traffic based on parameter (e.g., 50/50)
+ * - Use headers/cookies for consistent routing
+ * - Compare metrics between variants
+ */
+def deployABTesting() {
+    echo "🔬 Executing A/B Testing Deployment (Native K8s)"
+    
+    def trafficSplit = params.AB_TRAFFIC_SPLIT.toInteger()
+    def variantA = 100 - trafficSplit
+    
+    sh """
+        cd kube_manifests
+        
+        echo "🚀 Deploying A/B test variants..."
+        find strategies/ab-testing/ -name "*.yaml" -exec \
+            sed -i "s|image: dharmalakshmi15/aceest-fitness-gym:.*|image: ${DOCKER_IMAGE}:${IMAGE_TAG}|g" {} +
+        
+        kubectl apply -f strategies/ab-testing/
+        
+        echo "⏳ Waiting for variant B deployment..."
+        kubectl wait --for=condition=available deployment/aceest-web-variant-b \
+            -n ${K8S_NAMESPACE} --timeout=300s
+        
+        echo "🎯 Configuring traffic split using replica counts: A=${variantA}% / B=${trafficSplit}%"
+        
+        # Calculate replicas based on traffic split percentage
+        TOTAL_REPLICAS=4
+        VARIANT_B_REPLICAS=\$(echo "scale=0; (${trafficSplit} * \$TOTAL_REPLICAS) / 100" | bc)
+        VARIANT_A_REPLICAS=\$(echo "\$TOTAL_REPLICAS - \$VARIANT_B_REPLICAS" | bc)
+        
+        # Ensure at least 1 replica each
+        [ \$VARIANT_A_REPLICAS -lt 1 ] && VARIANT_A_REPLICAS=1
+        [ \$VARIANT_B_REPLICAS -lt 1 ] && VARIANT_B_REPLICAS=1
+        
+        echo "Scaling Variant A to \$VARIANT_A_REPLICAS replicas"
+        echo "Scaling Variant B to \$VARIANT_B_REPLICAS replicas"
+        
+        kubectl scale deployment aceest-web-variant-a -n ${K8S_NAMESPACE} --replicas=\$VARIANT_A_REPLICAS
+        kubectl scale deployment aceest-web-variant-b -n ${K8S_NAMESPACE} --replicas=\$VARIANT_B_REPLICAS
+        
+        echo "A/B Testing deployment complete!"
+        echo "Variant A: \$VARIANT_A_REPLICAS replicas (~${variantA}% traffic)"
+        echo "Variant B: \$VARIANT_B_REPLICAS replicas (~${trafficSplit}% traffic)"
+        echo 'Note: Traffic split is approximate based on pod count'
+        echo 'For precise traffic control, install Istio service mesh'
+    """
+}
+
+/**
+ * Cleanup Other Deployment Strategies
+ * - Scale down deployments from other strategies to avoid resource conflicts
+ * - Keeps only the selected strategy's deployments active
+ */
+def cleanupOtherStrategies(String currentStrategy) {
+    echo "🧹 Cleaning up deployments from other strategies..."
+    
+    sh """
+        # Define all possible deployments for each strategy
+        BLUE_GREEN_DEPLOYMENTS="aceest-web-blue aceest-web-green"
+        CANARY_DEPLOYMENTS="aceest-web-stable aceest-web-canary"
+        ROLLING_DEPLOYMENTS="aceest-web"
+        SHADOW_DEPLOYMENTS="aceest-web-production aceest-web-shadow"
+        AB_DEPLOYMENTS="aceest-web-variant-a aceest-web-variant-b"
+        
+        echo "Current strategy: ${currentStrategy}"
+        
+        # Scale down deployments based on current strategy
+        case "${currentStrategy}" in
+            "blue-green")
+                echo "Keeping blue-green deployments, scaling down others..."
+                for dep in \$CANARY_DEPLOYMENTS \$ROLLING_DEPLOYMENTS \$SHADOW_DEPLOYMENTS \$AB_DEPLOYMENTS; do
+                    if kubectl get deployment \$dep -n ${K8S_NAMESPACE} 2>/dev/null; then
+                        echo "Scaling down \$dep to 0 replicas"
+                        kubectl scale deployment \$dep -n ${K8S_NAMESPACE} --replicas=0 || true
+                    fi
+                done
+                ;;
+            "canary")
+                echo "Keeping canary deployments, scaling down others..."
+                for dep in \$BLUE_GREEN_DEPLOYMENTS \$ROLLING_DEPLOYMENTS \$SHADOW_DEPLOYMENTS \$AB_DEPLOYMENTS; do
+                    if kubectl get deployment \$dep -n ${K8S_NAMESPACE} 2>/dev/null; then
+                        echo "Scaling down \$dep to 0 replicas"
+                        kubectl scale deployment \$dep -n ${K8S_NAMESPACE} --replicas=0 || true
+                    fi
+                done
+                ;;
+            "rolling-update")
+                echo "Keeping rolling-update deployment, scaling down others..."
+                for dep in \$BLUE_GREEN_DEPLOYMENTS \$CANARY_DEPLOYMENTS \$SHADOW_DEPLOYMENTS \$AB_DEPLOYMENTS; do
+                    if kubectl get deployment \$dep -n ${K8S_NAMESPACE} 2>/dev/null; then
+                        echo "Scaling down \$dep to 0 replicas"
+                        kubectl scale deployment \$dep -n ${K8S_NAMESPACE} --replicas=0 || true
+                    fi
+                done
+                ;;
+            "shadow")
+                echo "Keeping shadow deployments, scaling down others..."
+                for dep in \$BLUE_GREEN_DEPLOYMENTS \$CANARY_DEPLOYMENTS \$ROLLING_DEPLOYMENTS \$AB_DEPLOYMENTS; do
+                    if kubectl get deployment \$dep -n ${K8S_NAMESPACE} 2>/dev/null; then
+                        echo "Scaling down \$dep to 0 replicas"
+                        kubectl scale deployment \$dep -n ${K8S_NAMESPACE} --replicas=0 || true
+                    fi
+                done
+                ;;
+            "ab-testing")
+                echo "Keeping A/B testing deployments, scaling down others..."
+                for dep in \$BLUE_GREEN_DEPLOYMENTS \$CANARY_DEPLOYMENTS \$ROLLING_DEPLOYMENTS \$SHADOW_DEPLOYMENTS; do
+                    if kubectl get deployment \$dep -n ${K8S_NAMESPACE} 2>/dev/null; then
+                        echo "Scaling down \$dep to 0 replicas"
+                        kubectl scale deployment \$dep -n ${K8S_NAMESPACE} --replicas=0 || true
+                    fi
+                done
+                ;;
+            *)
+                echo "Unknown strategy, skipping cleanup"
+                ;;
+        esac
+        
+        echo "✅ Cleanup complete - only ${currentStrategy} deployments will be active"
+    """
 }

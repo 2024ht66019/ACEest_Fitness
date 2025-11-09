@@ -2,7 +2,7 @@
 Authentication route tests.
 """
 import pytest
-from app.models.user import User
+from models.user import User
 
 
 class TestAuthentication:

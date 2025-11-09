@@ -90,9 +90,6 @@ spec:
         app: aceest-web
         version: shadow
         strategy: shadow
-      annotations:
-        prometheus.io/scrape: "true"
-        sidecar.istio.io/inject: "true"
     spec:
       initContainers:
       - name: wait-for-db
@@ -197,38 +194,3 @@ spec:
   selector:
     app: aceest-web
     version: production  # Only production receives real user traffic
----
-# Istio VirtualService for traffic mirroring (requires Istio service mesh)
-apiVersion: networking.istio.io/v1beta1
-kind: VirtualService
-metadata:
-  name: aceest-web-mirror
-  namespace: aceest-fitness
-spec:
-  hosts:
-  - aceest-web-service
-  http:
-  - route:
-    - destination:
-        host: aceest-web-service
-        subset: production
-      weight: 100
-    mirror:
-      host: aceest-web-shadow
-    mirrorPercentage:
-      value: 100.0
----
-apiVersion: networking.istio.io/v1beta1
-kind: DestinationRule
-metadata:
-  name: aceest-web-dr
-  namespace: aceest-fitness
-spec:
-  host: aceest-web-service
-  subsets:
-  - name: production
-    labels:
-      version: production
-  - name: shadow
-    labels:
-      version: shadow

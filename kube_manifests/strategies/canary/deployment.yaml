@@ -192,4 +192,4 @@ spec:
     protocol: TCP
     name: http
   selector:
-    app: aceest-web  # Selects both stable and canary (traffic split managed by Istio VirtualService)
+    app: aceest-web  # Selects both stable and canary (traffic split via replica scaling)

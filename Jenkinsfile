@@ -563,6 +563,9 @@ pipeline {
                                 --namespace=${K8S_NAMESPACE} --timeout=300s || true
                         """
                         
+                        // Cleanup previous deployment strategy resources
+                        cleanupOtherStrategies(DEPLOYMENT_STRATEGY_RESOLVED)
+                        
                         // Strategy-specific deployment
                         switch(DEPLOYMENT_STRATEGY_RESOLVED) {
                             case 'blue-green':
@@ -999,5 +1002,79 @@ def deployABTesting() {
         echo "Variant B: \$VARIANT_B_REPLICAS replicas (~${trafficSplit}% traffic)"
         echo 'Note: Traffic split is approximate based on pod count'
         echo 'For precise traffic control, install Istio service mesh'
+    """
+}
+
+/**
+ * Cleanup Other Deployment Strategies
+ * - Scale down deployments from other strategies to avoid resource conflicts
+ * - Keeps only the selected strategy's deployments active
+ */
+def cleanupOtherStrategies(String currentStrategy) {
+    echo "🧹 Cleaning up deployments from other strategies..."
+    
+    sh """
+        # Define all possible deployments for each strategy
+        BLUE_GREEN_DEPLOYMENTS="aceest-web-blue aceest-web-green"
+        CANARY_DEPLOYMENTS="aceest-web-stable aceest-web-canary"
+        ROLLING_DEPLOYMENTS="aceest-web"
+        SHADOW_DEPLOYMENTS="aceest-web-production aceest-web-shadow"
+        AB_DEPLOYMENTS="aceest-web-variant-a aceest-web-variant-b"
+        
+        echo "Current strategy: ${currentStrategy}"
+        
+        # Scale down deployments based on current strategy
+        case "${currentStrategy}" in
+            "blue-green")
+                echo "Keeping blue-green deployments, scaling down others..."
+                for dep in \$CANARY_DEPLOYMENTS \$ROLLING_DEPLOYMENTS \$SHADOW_DEPLOYMENTS \$AB_DEPLOYMENTS; do
+                    if kubectl get deployment \$dep -n ${K8S_NAMESPACE} 2>/dev/null; then
+                        echo "Scaling down \$dep to 0 replicas"
+                        kubectl scale deployment \$dep -n ${K8S_NAMESPACE} --replicas=0 || true
+                    fi
+                done
+                ;;
+            "canary")
+                echo "Keeping canary deployments, scaling down others..."
+                for dep in \$BLUE_GREEN_DEPLOYMENTS \$ROLLING_DEPLOYMENTS \$SHADOW_DEPLOYMENTS \$AB_DEPLOYMENTS; do
+                    if kubectl get deployment \$dep -n ${K8S_NAMESPACE} 2>/dev/null; then
+                        echo "Scaling down \$dep to 0 replicas"
+                        kubectl scale deployment \$dep -n ${K8S_NAMESPACE} --replicas=0 || true
+                    fi
+                done
+                ;;
+            "rolling-update")
+                echo "Keeping rolling-update deployment, scaling down others..."
+                for dep in \$BLUE_GREEN_DEPLOYMENTS \$CANARY_DEPLOYMENTS \$SHADOW_DEPLOYMENTS \$AB_DEPLOYMENTS; do
+                    if kubectl get deployment \$dep -n ${K8S_NAMESPACE} 2>/dev/null; then
+                        echo "Scaling down \$dep to 0 replicas"
+                        kubectl scale deployment \$dep -n ${K8S_NAMESPACE} --replicas=0 || true
+                    fi
+                done
+                ;;
+            "shadow")
+                echo "Keeping shadow deployments, scaling down others..."
+                for dep in \$BLUE_GREEN_DEPLOYMENTS \$CANARY_DEPLOYMENTS \$ROLLING_DEPLOYMENTS \$AB_DEPLOYMENTS; do
+                    if kubectl get deployment \$dep -n ${K8S_NAMESPACE} 2>/dev/null; then
+                        echo "Scaling down \$dep to 0 replicas"
+                        kubectl scale deployment \$dep -n ${K8S_NAMESPACE} --replicas=0 || true
+                    fi
+                done
+                ;;
+            "ab-testing")
+                echo "Keeping A/B testing deployments, scaling down others..."
+                for dep in \$BLUE_GREEN_DEPLOYMENTS \$CANARY_DEPLOYMENTS \$ROLLING_DEPLOYMENTS \$SHADOW_DEPLOYMENTS; do
+                    if kubectl get deployment \$dep -n ${K8S_NAMESPACE} 2>/dev/null; then
+                        echo "Scaling down \$dep to 0 replicas"
+                        kubectl scale deployment \$dep -n ${K8S_NAMESPACE} --replicas=0 || true
+                    fi
+                done
+                ;;
+            *)
+                echo "Unknown strategy, skipping cleanup"
+                ;;
+        esac
+        
+        echo "✅ Cleanup complete - only ${currentStrategy} deployments will be active"
     """
 }

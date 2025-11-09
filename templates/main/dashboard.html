@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - ACEest Fitness{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="row mb-4">
+        <div class="col-12">
+            <h1 class="display-5 fw-bold">
+                <i class="fas fa-home"></i> Dashboard
+            </h1>
+            <p class="lead text-muted">Welcome back, {{ current_user.username }}!</p>
+        </div>
+    </div>
+
+    <!-- Statistics Cards -->
+    <div class="row g-4 mb-5">
+        <div class="col-md-4">
+            <div class="card bg-primary text-white h-100 shadow">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="text-uppercase mb-1">Total Workouts</h6>
+                            <h2 class="mb-0">{{ stats.total_workouts }}</h2>
+                        </div>
+                        <i class="fas fa-clipboard-list fa-3x opacity-50"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-4">
+            <div class="card bg-success text-white h-100 shadow">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="text-uppercase mb-1">Total Minutes</h6>
+                            <h2 class="mb-0">{{ stats.total_duration }}</h2>
+                        </div>
+                        <i class="fas fa-clock fa-3x opacity-50"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-4">
+            <div class="card bg-info text-white h-100 shadow">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="text-uppercase mb-1">Avg Duration</h6>
+                            <h2 class="mb-0">{{ stats.average_duration }} min</h2>
+                        </div>
+                        <i class="fas fa-chart-bar fa-3x opacity-50"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Quick Actions -->
+    <div class="row mb-5">
+        <div class="col-12">
+            <div class="card shadow-sm">
+                <div class="card-body">
+                    <h5 class="card-title mb-4"><i class="fas fa-bolt"></i> Quick Actions</h5>
+                    <div class="d-grid gap-2">
+                        <a href="{{ url_for('workouts.add_workout') }}" class="btn btn-primary btn-lg">
+                            <i class="fas fa-plus-circle"></i> Log New Workout
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent Workouts -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card shadow-sm">\n                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0"><i class="fas fa-history"></i> Recent Workouts</h5>
+                </div>
+                <div class="card-body">
+                    {% if recent_workouts %}
+                        <div class="table-responsive">
+                            <table class="table table-hover">
+                                <thead>
+                                    <tr>
+                                        <th>Date</th>
+                                        <th>Category</th>
+                                        <th>Exercise</th>
+                                        <th>Duration</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for workout in recent_workouts %}
+                                    <tr>
+                                        <td>{{ workout.workout_date.strftime('%Y-%m-%d') }}</td>
+                                        <td>
+                                            <span class="badge bg-info">{{ workout.category }}</span>
+                                        </td>
+                                        <td>{{ workout.exercise_name }}</td>
+                                        <td>{{ workout.duration }} min</td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                        <div class="text-center mt-3">
+                            <a href="{{ url_for('workouts.list_workouts') }}" class="btn btn-outline-primary">
+                                View All Workouts <i class="fas fa-arrow-right"></i>
+                            </a>
+                        </div>
+                    {% else %}
+                        <div class="text-center py-5 text-muted">
+                            <i class="fas fa-clipboard-list fa-3x mb-3"></i>
+                            <p>No workouts logged yet. Start tracking your fitness journey!</p>
+                            <a href="{{ url_for('workouts.add_workout') }}" class="btn btn-primary">
+                                <i class="fas fa-plus-circle"></i> Add First Workout
+                            </a>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

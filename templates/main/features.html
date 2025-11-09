@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+
+{% block title %}Features - ACEest Fitness{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h1 class="display-4 fw-bold text-center mb-5">
+        <i class="fas fa-star"></i> Platform Features
+    </h1>
+
+    <div class="row g-4">
+        <!-- User Management -->
+        <div class="col-md-6">
+            <div class="card h-100 shadow">
+                <div class="card-header bg-primary text-white">
+                    <h4 class="mb-0"><i class="fas fa-user-circle"></i> User Management</h4>
+                </div>
+                <div class="card-body">
+                    <ul>
+                        <li><strong>Secure Authentication:</strong> Protected login with password hashing</li>
+                        <li><strong>Profile Customization:</strong> Store personal information and preferences</li>
+                        <li><strong>Health Metrics:</strong> Track BMI, BMR, and TDEE automatically</li>
+                        <li><strong>Privacy:</strong> Your data is secure and private</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- Workout Tracking -->
+        <div class="col-md-6">
+            <div class="card h-100 shadow">
+                <div class="card-header bg-success text-white">
+                    <h4 class="mb-0"><i class="fas fa-dumbbell"></i> Workout Tracking</h4>
+                </div>
+                <div class="card-body">
+                    <ul>
+                        <li><strong>Category System:</strong> Organize workouts into Warm-up, Workout, Cool-down</li>
+                        <li><strong>Duration Tracking:</strong> Monitor time spent on each exercise</li>
+                        <li><strong>Calorie Calculation:</strong> Automatic calculation using MET values</li>
+                        <li><strong>Historical Data:</strong> Access all your past workout sessions</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- Progress Analytics -->
+        <div class="col-md-6">
+            <div class="card h-100 shadow">
+                <div class="card-header bg-info text-white">
+                    <h4 class="mb-0"><i class="fas fa-chart-bar"></i> Progress Analytics</h4>
+                </div>
+                <div class="card-body">
+                    <ul>
+                        <li><strong>Visual Charts:</strong> Bar and pie charts for data visualization</li>
+                        <li><strong>Category Breakdown:</strong> See how time is distributed across categories</li>
+                        <li><strong>Statistics Dashboard:</strong> Quick overview of your fitness journey</li>
+                        <li><strong>Trend Analysis:</strong> Track improvements over time</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- Workout Plans -->
+        <div class="col-md-6">
+            <div class="card h-100 shadow">
+                <div class="card-header bg-warning">
+                    <h4 class="mb-0"><i class="fas fa-list-check"></i> Workout Plans</h4>
+                </div>
+                <div class="card-body">
+                    <ul>
+                        <li><strong>Structured Programs:</strong> Pre-designed workout routines</li>
+                        <li><strong>Exercise Guidance:</strong> Detailed instructions for each exercise</li>
+                        <li><strong>Warm-up & Cool-down:</strong> Complete session planning</li>
+                        <li><strong>Progressive Training:</strong> Plans that grow with your fitness level</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- Diet Guide -->
+        <div class="col-md-6">
+            <div class="card h-100 shadow">
+                <div class="card-header bg-danger text-white">
+                    <h4 class="mb-0"><i class="fas fa-utensils"></i> Diet Guide</h4>
+                </div>
+                <div class="card-body">
+                    <ul>
+                        <li><strong>Goal-Based Plans:</strong> Different diets for weight loss, muscle gain, endurance</li>
+                        <li><strong>Meal Suggestions:</strong> Breakfast, lunch, and dinner ideas</li>
+                        <li><strong>Macronutrient Guide:</strong> Understand protein, carbs, and fats</li>
+                        <li><strong>Hydration Tips:</strong> Water intake recommendations</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- Responsive Design -->
+        <div class="col-md-6">
+            <div class="card h-100 shadow">
+                <div class="card-header bg-secondary text-white">
+                    <h4 class="mb-0"><i class="fas fa-mobile-alt"></i> Responsive Design</h4>
+                </div>
+                <div class="card-body">
+                    <ul>
+                        <li><strong>Mobile-Friendly:</strong> Access from any device</li>
+                        <li><strong>Modern UI:</strong> Clean, intuitive interface with Bootstrap 5</li>
+                        <li><strong>Fast Performance:</strong> Optimized for quick loading</li>
+                        <li><strong>Cross-Browser:</strong> Works on all modern browsers</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="my-5">
+        <div class="card shadow bg-gradient" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+            <div class="card-body p-5 text-white text-center">
+                <h2 class="mb-4">Start Your Fitness Transformation Today</h2>
+                <p class="lead mb-4">
+                    Join thousands of users who are tracking their progress and achieving their fitness goals with ACEest Fitness.
+                </p>
+                <div class="d-grid gap-2 d-md-flex justify-content-center">
+                    <a href="{{ url_for('auth.register') }}" class="btn btn-light btn-lg px-5">
+                        <i class="fas fa-user-plus"></i> Sign Up Free
+                    </a>
+                    <a href="{{ url_for('main.about') }}" class="btn btn-outline-light btn-lg px-5">
+                        <i class="fas fa-info-circle"></i> Learn More
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
